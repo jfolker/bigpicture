@@ -172,9 +172,7 @@ namespace bigpicture {
       zmq::context_t      ctx(/*nthreads*/ 1);
       zmq::socket_t       sock(ctx, zmq::socket_type::pull);
       zmq::mutable_buffer buf(m_recv_buf.get(), m_recv_buf_size);      
-      
-      // TODO: Does ZeroMQ automatically attempt to reconnect in the event of
-      //       an unexpected disconnect?
+            
       in_poller.add(sock, zmq::event_flags::pollin);
       sock.connect(m_url);
       std::cout << "INFO: connected to Dectris DCU at " << m_url << std::endl;

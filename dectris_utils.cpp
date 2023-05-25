@@ -145,8 +145,8 @@ void bigpicture::dectris_global_data::parse_part1(const void* data, size_t len) 
 inline void bigpicture::dectris_global_data::parse_part2(const void* data, size_t len) {
   // Parse config here.
   simdjson::padded_string padded(static_cast<const char*>(data), len);
-  m_config_json = m_parser.parse(padded).get<json_obj>();
-  m_config.reset(m_config_json);
+  simdjson::dom::object record = m_parser.parse(padded).get<json_obj>();
+  m_config.parse(std::cref(record));
 #ifndef NDEBUG
   std::clog << "DEBUG: (config for image series)\n"
 	    << padded << "\n\n";
@@ -260,7 +260,7 @@ inline void bigpicture::dectris_global_data::parse_appendix(const void* data, si
 #endif
 }
 
-void bigpicture::detector_config_t::reset(const simdjson::dom::object& json) {
+void bigpicture::detector_config_t::parse(const simdjson::dom::object& json) {
   std::string tmp_str;
   simdjson::dom::element tmp_element;
 
