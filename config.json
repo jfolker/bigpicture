@@ -1,0 +1,29 @@
+{
+    "archiver" : {	
+	"source" : {
+	    "interface"       : "dectris-stream",
+	    "zmq_push_socket" : "tcp://kale.ls-cat.org:9999",
+	    "poll_interval"   : 3600,
+	    "read_buffer_mb"  : 128,
+	    "using_header_appendix" : true,
+	    "using_image_appendix" : true
+	},
+
+	"destination" : {
+	    "format" : "minicbf",
+	    "temporary" : "/tmp/bigpicture",
+	    "permanent" : "/pf"
+	}
+    },
+    
+    "indexer" : {
+	"method" : "bigpicture.index",
+	"type"   : "executable",
+	"output" : "json"
+    },
+    
+    "compressor" : {
+	"workers": 4,
+	"format" : "jpeg"
+    }
+}
