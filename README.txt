@@ -18,6 +18,11 @@ Important:
     associated with bigpicture.
 
 Instructions:
+  Obtaining dependencies (Ubuntu):
+    sudo apt install clang llvm boost openssl libbsd-dev libcbf-dev libgnutls30 libgomp1 \
+    libgssapi-krb5-2 libhdf5-dev libnorm1 libpgm-5.3.0 libsodium23 libturbojpeg-dev \
+    libzmq3-dev libunwind-14
+    
   Building for the First Time:
     make bitshuffle # only needs to be ran
     make 
