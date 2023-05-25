@@ -1,3 +1,9 @@
 [submodule "bitshuffle"]
-	path = bitshuffle
+	path = deps/bitshuffle
 	url = git@github.com:kiyo-masui/bitshuffle.git
+[submodule "deps/simdjson"]
+	path = deps/simdjson
+	url = git@github.com:simdjson/simdjson.git
+[submodule "deps/cppzmq"]
+	path = deps/cppzmq
+	url = git@github.com:zeromq/cppzmq.git

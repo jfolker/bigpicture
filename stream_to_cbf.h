@@ -61,7 +61,7 @@ namespace bigpicture {
     /**
      * Move constructor
      */
-    stream_to_cbf(stream_to_cbf&& src) :
+    stream_to_cbf(stream_to_cbf&& src) noexcept :
       m_appendix(std::move(src.m_appendix)),
       m_buffer(std::move(src.m_buffer)),
       m_cbf(src.m_cbf),
@@ -69,6 +69,12 @@ namespace bigpicture {
       m_global(std::move(src.m_global)),
       m_parser(std::move(src.m_parser)),
       m_parse_state(src.m_parse_state) {
+    }
+
+    ~stream_to_cbf() noexcept {
+      // TODO: Wrap the CBF handle and CBF processing into its own class.
+      // It would be better for stream_to_cbf and all other stream_parser subclasses to be trivially destructible.
+      if (m_cbf) cbf_free_handle(m_cbf);
     }
     
     /**
