@@ -1,6 +1,3 @@
-[submodule "json"]
-	path = json
-	url = git@github.com:boostorg/json.git
 [submodule "bitshuffle"]
 	path = bitshuffle
 	url = git@github.com:kiyo-masui/bitshuffle.git
