@@ -1,0 +1,13 @@
+*.o
+*.a
+*.so
+*.bmp
+*.cbf
+*.lz4
+test_*
+bin/
+lib/
+include/
+deps/lib/
+html/
+latex/

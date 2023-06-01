@@ -13,7 +13,7 @@
 #include "dectris_stream.h"
 #include "stream_to_cbf.h"
 
-#define BOOST_TEST_MODULE BasicStreamTest
+#define BOOST_TEST_MODULE DectrisStreamTest
 #include <boost/test/unit_test.hpp>
 
 struct global_sequence {

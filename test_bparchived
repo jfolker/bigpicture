@@ -1,0 +1,2 @@
+#!/bin/bash
+echo TODO: Implement test_bparchived >&2; exit 1
