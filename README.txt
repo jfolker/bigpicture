@@ -24,7 +24,7 @@ Instructions:
     libzmq3-dev libunwind-14
     
   Building for the First Time:
-    make bitshuffle # only needs to be ran
+    make deps # only needs to be run one time, generates static libs of each submodule
     make 
     make test
   
