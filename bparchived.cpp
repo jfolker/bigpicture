@@ -2,6 +2,7 @@
 #include <signal.h>
 #include <sstream>
 #include <string>
+#include <string.h>
 
 #include <hdf5.h>
 #include <simdjson.h>
@@ -22,7 +23,7 @@ static void signal_handler(int signum) {
   char strbuf[1024];
   memset(strbuf, '\0', sizeof(strbuf));
   strlcat(strbuf, "bparchived received the \"", sizeof(strbuf));
-  strlcat(strbuf, strsignal(signum), sizeof(strbuf));
+  strlcat(strbuf, strsignal(signum), sizeof(strbuf)-1);
   
   if (++signal_count > 1) {
     strlcat(strbuf, "\" signal for the second time. "

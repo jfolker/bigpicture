@@ -24,16 +24,19 @@ EXECUTABLES := bparchived bpcompressd bpindexd
 UNIT_TESTS := test_dectris_stream
 INTEGRATION_TESTS := test_bparchived
 
-LIB_DIRS := -L /opt/zmq-draft/usr/lib/x86_64-linux-gnu -L /usr/lib/x86_64-linux-gnu \
-		-L /usr/lib/x86_64-linux-gnu/hdf5/serial -L /usr/local/lib -L ./lib
+LIB_DIRS := -L ./lib -L ./deps/usr/local/lib \
+	-L /usr/lib/x86_64-linux-gnu/hdf5/serial \
+	-L /usr/lib/x86_64-linux-gnu \
+	-L /usr/lib -L /usr/local/lib
+
 #ZMQ_STATIC_DEPS := -l:libbsd.a -l:libsodium.a -l:libpgm.a -l:libnorm.a -l:libprotokit.a -l:libzmq.a
 ZMQ_DYNAMIC_DEPS := -lbsd -lsodium -lpgm -lnorm -lprotokit -lzmq
 
 DEPS :=  $(LIB_DIRS) \
 	-lpthread -lgomp -lunwind -lcrypto -lgnutls -lgssapi_krb5 \
 	$(ZMQ_DYNAMIC_DEPS) \
-	-l:libhdf5.a -l:bitshuffle.a -l:libcbf.a -l:libturbojpeg.a \
-	-l:libsimdjson.a #-l:libjxl.a
+	-l:libhdf5.a -l:libbitshuffle.a -l:libcbf.a -l:libturbojpeg.a \
+	-l:libsimdjson.a
 
 
 
@@ -42,8 +45,11 @@ DEPS :=  $(LIB_DIRS) \
 # TODO: Use -stdlib=libc++, requires building libzmq with libc++ as well.
 #       This is currently not feasible because 'apt install libc++-dev'
 #       uninstalls the version of libunwind we rely on.
-CXX_COMMON_FLAGS =-std=c++17 -Wall -Wextra -Werror -I /opt/zmq-draft/usr/include/ \
-  -I /usr/include/hdf5/serial -I /usr/local/include/bsd -I ./bitshuffle/src \
+CXX_COMMON_FLAGS =-std=c++17 -Wall -Wextra -Wno-unused-parameter -Werror \
+  -I ./deps/usr/local/include \
+  -I /usr/include/hdf5/serial \
+  -I /usr/local/include/bsd -I /usr/include/bsd \
+  -I /usr/local/include -I /usr/include \
   -DZMQ_BUILD_DRAFT_API=1 -DLIBBSD_OVERLAY
 
 ASAN_FLAGS = -fsanitize=address -fsanitize-address-use-after-return=always \
@@ -82,7 +88,7 @@ install: build
 	install --mode=0644 config.json /etc/bigpicture
 
 .PHONY: build
-build: Makefile include lib bin
+build: Makefile deps include lib bin
 
 .PHONY: docs
 docs:
@@ -160,16 +166,11 @@ integration_tests:
 # TODO: Build cppzmq, simdjson, and our own special version of libzmq that enables
 #       the poller library.
 #
-#.PHONY: deps
-#deps: install-deps.sh
-
-# Dependencies for lz4 and for bslz4 decompression.
-# The LZ4 implementation is compiled into the same static lib as bslz4.
-# This only needs to be done when the bitshuffle submodule is updated.
-# TODO: Fork bitshuffle and have it build its own static and shared libs,
-#       putting no deps into the static lib, and dynamically linking
-#       everything necessary for the shared lib.
 .PHONY: deps
+deps: deps.installed
+deps.installed:
+	./install-deps.sh
+
 bitshuffle:
 	mkdir -p include/ lib/ && rm -f lib/bitshuffle.a
 	cd include && cp ../bitshuffle/lz4/*.h ./ && cp ../bitshuffle/src/*.h ./ && cd -

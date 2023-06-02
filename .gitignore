@@ -4,10 +4,12 @@
 *.bmp
 *.cbf
 *.lz4
+deps.installed
 test_*
 bin/
 lib/
 include/
-deps/lib/
+deps/build/
+deps/usr/
 html/
 latex/

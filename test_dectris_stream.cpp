@@ -6,8 +6,8 @@
 #include <thread>
 
 #include <zmq.h>
+#include <lz4.h>
 
-#include "include/lz4.h"
 #include "bigpicture_utils.h"
 #include "dectris_utils.h"
 #include "dectris_stream.h"

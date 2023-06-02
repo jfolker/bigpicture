@@ -10,8 +10,8 @@
 
 #include <cbflib/cbf.h>
 
-#include "include/bitshuffle.h"
-#include "include/lz4.h"
+#include <bitshuffle.h>
+#include <lz4.h>
 
 #include "bigpicture_utils.h"
 #include "dectris_stream.h"
