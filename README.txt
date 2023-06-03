@@ -19,19 +19,14 @@ Important:
 
 Instructions:
   Obtaining dependencies (Ubuntu):
-    sudo apt install clang llvm boost openssl libbsd-dev libcbf-dev libgnutls30 libgomp1 \
-    libgssapi-krb5-2 libhdf5-dev libnorm1 libpgm-5.3.0 libsodium23 libturbojpeg-dev \
-    libzmq3-dev libunwind-14
+    sudo apt install pkg-config python3-pip clang llvm libgomp1 libunwind-dev libboost-all-dev \
+    openssl libbsd-dev libcbf-dev libgnutls30 libgssapi-krb5-2 libhdf5-dev libnorm-dev libpgm-dev \
+    libsodium-dev libturbojpeg-dev
     
-  Building for the First Time:
-    make deps # only needs to be run one time, generates static libs of each submodule
-    make 
-    make test
-  
-  Subsequent Builds:
+  Building:
     make
-
-  Testing:
+    
+  Running all the tests:
     make test
     
 bparchived [-c config_file] :
