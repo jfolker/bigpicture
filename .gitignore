@@ -4,6 +4,7 @@
 *.bmp
 *.cbf
 *.lz4
+default.profraw
 deps.installed
 test_*
 bin/

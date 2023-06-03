@@ -10,10 +10,10 @@
 #
 #
 
-# TODO: Use lld once 
+# TODO: Use lld once we can confi 
 CC := clang
 CXX := clang++
-LD := ld
+LD := lld
 
 HEADERS := bigpicture_utils.h dectris_utils.h dectris_stream.h stream_to_cbf.h
 OBJECTS := bigpicture_utils.o dectris_utils.o stream_to_cbf.o
@@ -29,14 +29,20 @@ LIB_DIRS := -L ./lib -L ./deps/usr/local/lib \
 	-L /usr/lib/x86_64-linux-gnu \
 	-L /usr/lib -L /usr/local/lib
 
-#ZMQ_STATIC_DEPS := -l:libbsd.a -l:libsodium.a -l:libpgm.a -l:libnorm.a -l:libprotokit.a -l:libzmq.a
-ZMQ_DYNAMIC_DEPS := -lbsd -lsodium -lpgm -lnorm -lprotokit -lzmq
+# Anything that meets one of the following 3 criteria should be linked statically:
+# 1. We built ourselves (submodules).
+# 2. Is not a crypto library.
+# 3. Does not ship with the OS.
+STATIC_DEPS := -l:libbsd.a -l:libsodium.a -l:libpgm.a -l:libnorm.a -l:libprotokit.a \
+	-l:libzmq.a -l:libsimdjson.a -l:libhdf5.a -l:libbitshuffle.a -l:libcbf.a \
+	-l:libturbojpeg.a
 
-DEPS :=  $(LIB_DIRS) \
-	-lpthread -lgomp -lunwind -lcrypto -lgnutls -lgssapi_krb5 \
-	$(ZMQ_DYNAMIC_DEPS) \
-	-l:libhdf5.a -l:libbitshuffle.a -l:libcbf.a -l:libturbojpeg.a \
-	-l:libsimdjson.a
+# Only common system libraries
+# TODO: libbsd (a compatibility shim for linux) shouldn't be linked on any BSD system.
+DYNAMIC_DEPS := -lpthread -lgomp -lunwind -lbsd -lcrypto -lgnutls -lgssapi_krb5 \
+	-lsodium -lpgm -lnorm -lprotokit
+
+DEPS = $(LIB_DIRS) $(STATIC_DEPS) $(DYNAMIC_DEPS)
 
 
 
@@ -45,6 +51,8 @@ DEPS :=  $(LIB_DIRS) \
 # TODO: Use -stdlib=libc++, requires building libzmq with libc++ as well.
 #       This is currently not feasible because 'apt install libc++-dev'
 #       uninstalls the version of libunwind we rely on.
+# NOTE: Unused parameters are perfectly reasonable when writing a callback
+#       to be used by another library, hence warnings for them are disabled.
 CXX_COMMON_FLAGS =-std=c++17 -Wall -Wextra -Wno-unused-parameter -Werror \
   -I ./deps/usr/local/include \
   -I /usr/include/hdf5/serial \
@@ -66,7 +74,7 @@ else
 CXXFLAGS ?= $(CXX_COMMON_FLAGS) $(CXX_DEBUG_FLAGS)
 endif
 
-LDFLAGS = $(DEPS)
+#LDFLAGS = $(DEPS)
 
 .PHONY: default
 default: build
@@ -108,7 +116,10 @@ include: $(HEADERS)
 #
 %.o: %.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+.PHONY: objects
+objects: $(OBJECTS)
 
+# Link our own symbols, and leave out dependencies.
 %.a: $(OBJECTS) $(HEADERS)
 	mkdir -p ./lib/
 	ar -crs ./lib/$@ $(OBJECTS)
@@ -116,10 +127,14 @@ include: $(HEADERS)
 static-libs: $(STATIC_LIBS)
 
 # TODO: Building a shared library is broken for now, and -fPIC is not set,
-#       which is also fraught with troubles. For now
-%.so: $(OBJECTS) $(HEADERS)
+#       which is also fraught with troubles.
+# 1. For "lld", the linker is actually ld.lld
+# 2. The dynamic libs to link against are not specified the same way they
+#    are for the compiler.
+# 3. 
+%.so: objects $(HEADERS)
 	mkdir -p ./lib/
-	$(LD) -o ./lib/$@ $(OBJECTS) $(DEPS)
+	ld.lld -o ./lib/$@ $(OBJECTS) $(STATIC_DEPS) $(DYNAMIC_DEPS)
 .PHONY: shared-libs
 shared-libs: $(SHARED_LIBS)
 
@@ -131,13 +146,13 @@ lib: static-libs
 # TODO: Should we link against the static lib instead of each individual object?
 #       It would make passing test results more reassuring.
 #
-bp%d: bp%d.cpp $(OBJECTS) $(HEADERS)
+bp%d: bp%d.cpp objects $(HEADERS)
 	mkdir -p ./bin/
-	$(CXX) $(CXXFLAGS) -o ./bin/$@ $< $(OBJECTS) $(DEPS)
+	$(CXX) $(CXXFLAGS) -fuse-ld=$(LD) -o ./bin/$@ $< $(OBJECTS) $(DEPS)
 
-bigpicture: bigpicture.cpp $(OBJECTS) $(HEADERS)
+bigpicture: bigpicture.cpp objects $(HEADERS)
 	mkdir -p ./bin/
-	$(CXX) $(CXXFLAGS) -o ./bin/bigpicture bigpicture.cpp $(OBJECTS) $(DEPS)
+	$(CXX) $(CXXFLAGS) -fuse-ld=$(LD) -o ./bin/bigpicture bigpicture.cpp $(OBJECTS) $(DEPS)
 
 bin: $(EXECUTABLES)
 
@@ -151,10 +166,10 @@ TEST_BUILD_FLAGS := -lboost_unit_test_framework -DBOOST_TEST_DYN_LINK -DBOOST_TE
 test: unit_tests
 
 test_%: test_%.cpp
-	$(CXX) $(CXXFLAGS) -o ./$@ $< $(OBJECTS) $(DEPS) $(TEST_BUILD_FLAGS)
+	$(CXX) $(CXXFLAGS) -fuse-ld=$(LD) -o ./$@ $< $(OBJECTS) $(DEPS) $(TEST_BUILD_FLAGS)
 
 .PHONY: unit_tests
-unit_tests: $(UNIT_TESTS)
+unit_tests: $(UNIT_TESTS) objects
 	$(foreach utest,$(UNIT_TESTS),./$(utest) || echo)
 
 .PHONY: integration_tests
