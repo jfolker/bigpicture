@@ -4,9 +4,11 @@ set -ue
 BP_BASEDIR=$PWD
 cd deps
 
+# All deps were originally built and tested on GCC, so we must use it.
+# TODO: Fix build problems with clang on some deps and submit a pull request.
 export CMAKE_BUILD_PARALLEL_LEVEL=4
-export CC=clang
-export CXX=clang++
+export CC=gcc
+export CXX=g++
 export CMAKE_C_COMPILER=$CC
 export CMAKE_CXX_COMPILER=$CXX
 

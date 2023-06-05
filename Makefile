@@ -39,7 +39,7 @@ STATIC_DEPS := -l:libbsd.a -l:libsodium.a -l:libpgm.a -l:libnorm.a -l:libprotoki
 
 # Only common system libraries
 # TODO: libbsd (a compatibility shim for linux) shouldn't be linked on any BSD system.
-DYNAMIC_DEPS := -lpthread -lgomp -lunwind -lbsd -lcrypto -lgnutls -lgssapi_krb5 \
+DYNAMIC_DEPS := -lpthread -lunwind -lbsd -lcrypto -lgnutls -lgssapi_krb5 \
 	-lsodium -lpgm -lnorm -lprotokit
 
 DEPS = $(LIB_DIRS) $(STATIC_DEPS) $(DYNAMIC_DEPS)
@@ -53,7 +53,7 @@ DEPS = $(LIB_DIRS) $(STATIC_DEPS) $(DYNAMIC_DEPS)
 #       uninstalls the version of libunwind we rely on.
 # NOTE: Unused parameters are perfectly reasonable when writing a callback
 #       to be used by another library, hence warnings for them are disabled.
-CXX_COMMON_FLAGS =-std=c++17 -Wall -Wextra -Wno-unused-parameter -Werror \
+CXX_COMMON_FLAGS =-std=c++17 -fopenmp=libiomp5 -Wall -Wextra -Wno-unused-parameter -Werror \
   -I ./deps/usr/local/include \
   -I /usr/include/hdf5/serial \
   -I /usr/local/include/bsd -I /usr/include/bsd \
