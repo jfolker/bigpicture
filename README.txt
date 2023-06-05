@@ -39,13 +39,20 @@ Instructions:
       libsodium-dev libturbojpeg-dev
     
     Cloning the repository with all its submodule dependencies:
-      git clone --recurse-submodules <repository url>
+      git clone <repository url>
+      cd bigpicture
+      git submodule update --init
     
     Building for the first time and all subsequent times:
       make
       
     Running tests:
       make test
+      
+    Note: We do not use install submodules recursively because some extra submodules within our dependencies 
+    install headers that replace system headers, e.g. an 'errno.h' file that does not contain the necessary 
+    macro definitions. The submodules we use minus their submodules are sufficient to build all of the 
+    functionality of bigpicture.
     
 bparchived [-c config_file] :
   Connects to a Dectris DCU via the "Stream" interface using a ZeroMQ pull socket and writes each 
