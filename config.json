@@ -9,14 +9,14 @@
 	    "workers"               : 12,
 	    "zmq_push_socket"       : "tcp://kale.ls-cat.org:9999"
 	},
-
+	
 	"destination" : {
 	    "format"    : "minicbf",
 	    "temporary" : "/tmp/bigpicture",
 	    "permanent" : "/pf"
 	}
     },
-
+    
     "compressor" : {
 	"format"  : "jpeg",
 	"workers" : 4
