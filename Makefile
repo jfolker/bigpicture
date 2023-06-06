@@ -53,7 +53,7 @@ DEPS = $(LIB_DIRS) $(STATIC_DEPS) $(DYNAMIC_DEPS)
 #       uninstalls the version of libunwind we rely on.
 # NOTE: Unused parameters are perfectly reasonable when writing a callback
 #       to be used by another library, hence warnings for them are disabled.
-CXX_COMMON_FLAGS =-std=c++17 -fopenmp=libiomp5 -Wall -Wextra -Wno-unused-parameter -Werror \
+CXX_COMMON_FLAGS =-std=c++17 -fopenmp=libomp -Wall -Wextra -Wno-unused-parameter -Werror \
   -I ./deps/usr/local/include \
   -I /usr/include/hdf5/serial \
   -I /usr/local/include/bsd -I /usr/include/bsd \

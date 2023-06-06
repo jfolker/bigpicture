@@ -3,11 +3,9 @@
 
 #include <math.h>
 #include <simdjson.h>
-#include <unordered_map>
 #include "bigpicture_utils.h"
 
 namespace bigpicture {
-
   /**
    * The header_detail field of a stream interface global header, as found in the part 1 message.
    */
@@ -17,18 +15,11 @@ namespace bigpicture {
     basic=2,
     all=3,
   };
-  extern std::unordered_map<header_detail_t, std::string> header_detail_names;
-
   /**
-   * The legal values of the "compression" config parameter.
+   * @return the string representation of the enum value, e.g.
+   *         header_detail_name(basic) returns "basic".
    */
-  enum compress_t : int {
-    unknown=-1,
-    none=0,
-    lz4=1,
-    bslz4=2,
-  };
-  extern std::unordered_map<compress_t, std::string> compress_names;
+  const std::string& header_detail_name(header_detail_t x);
   
   /**
    * Deserialized fields from the "config" parameters of the "detector" subsystem, 
@@ -43,13 +34,13 @@ namespace bigpicture {
     /**
      * Default constructor
      * @todo constexpr-fy this once we switch to C++20 and Clang makes the basic_string 
-     *       ctors compliant the spec.
+     *       ctors compliant with the spec.
      */
     /*constexpr*/ detector_config_t() noexcept :
       beam_center_x(NAN),
       beam_center_y(NAN),
       bit_depth_image(-1),
-      compression(compress_t::unknown),
+      compression(compressor_t::unknown),
       count_time(NAN),
       countrate_correction_count_cutoff(-1),
       detector_distance(NAN),
@@ -70,7 +61,7 @@ namespace bigpicture {
     /**
      * Move constructor
      * @todo constexpr-fy this once we switch to C++20 and Clang makes the basic_string 
-     *       ctors compliant the spec.
+     *       ctors compliant with the spec.
      */
     /*constexpr*/ detector_config_t(detector_config_t&& src) noexcept :
       beam_center_x(src.beam_center_x),
@@ -134,7 +125,7 @@ namespace bigpicture {
     double       beam_center_x;   //!< pixels
     double       beam_center_y;   //!< pixels
     int64_t      bit_depth_image; //!< Bits per pixel
-    compress_t   compression;
+    compressor_t compression;
     double       count_time;
     int64_t      countrate_correction_count_cutoff;
     std::string  description;

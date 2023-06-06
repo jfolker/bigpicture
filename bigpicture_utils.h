@@ -4,9 +4,26 @@
 #include <stdexcept>
 #include <string>
 
+#include <bitshuffle.h>
+#include <lz4.h>
 #include <simdjson.h>
 
 namespace bigpicture {
+  /**
+   * The legal values of the "compression" config parameter.
+   */
+  enum compressor_t : int {
+    unknown=-1,
+    none=0,
+    lz4=1,
+    bslz4=2,
+  };
+  /**
+   * @return the string representation of the enum value, e.g.
+   *         compressor_name(lz4) returns "lz4".
+   */
+  const std::string& compressor_name(compressor_t x);
+  
   /**
    * Validates the "htype" field of a global header message part or an image
    * header message part. If the htype is incorrect, an exception is thrown.
@@ -111,26 +128,27 @@ namespace bigpicture {
   /**
    * A convenience utility wrapper around std::unique_ptr<char[]>
    *
-   * 1. Pointer conversion operators return the underlying raw buffers.
+   * 1. Pointer conversion operators return the underlying raw buffer.
    * 2. Numeric conversion operators return the buffer size.
    * 3. Comparison operators compare against the buffer size.
    * 4. The boolean conversion operator returns true if the buffer is nonzero size.
    */
   class unique_buffer {
   public:
-    unique_buffer() : m_len(0) {}
-    unique_buffer(size_t n) : m_len(n), m_data(new char[n]) {}
+    constexpr unique_buffer() noexcept : m_len(0) {}
+    unique_buffer(size_t len) : m_len(len), m_data(new char[len]) {}
 
     size_t size() const { return m_len; }
     
-    explicit operator void*()  const { return m_data.get(); }
-    explicit operator char*()  const { return m_data.get(); }
-
-    explicit operator size_t() const { return m_len; }
+    constexpr explicit operator char*()   const { return m_data.get(); }
+    constexpr explicit operator void*()   const { return m_data.get(); }
     
-    bool operator <(size_t rhs) const { return m_len < rhs; }
+    constexpr explicit operator int64_t() const { return static_cast<int64_t>(m_len); }
+    constexpr explicit operator size_t()  const { return m_len; }
+    
+    constexpr bool operator <(size_t rhs) const { return m_len < rhs; }
 
-    void realloc(size_t n) {
+    void resize(size_t n) {
       if (n == m_len) {
 	return;
 	
@@ -144,19 +162,18 @@ namespace bigpicture {
       }
     }
 
-    void reset() { realloc(0); }
-
-    /*
-    void decode(detector_config_t::compress_t codec,
-		const void src, size_t src_len) {
+    void reset() { resize(0); }
+    
+    void decode(compressor_t codec,
+		const void* src, size_t src_len) {
       switch (codec) {
-      case bslz4:
+      case compressor_t::bslz4:
 	bslz4_decode(src, src_len);
 	break;
-      case lz4:
+      case compressor_t::lz4:
 	lz4_decode(src, src_len);
 	break;
-      case none:
+      case compressor_t::none:
 	memcpy(m_data.get(), src, src_len);
 	break;
       default:
@@ -166,28 +183,41 @@ namespace bigpicture {
 	throw std::runtime_error(ss.str());
       }
     }
-
+    
     void bslz4_decode(const void* cbuf, size_t compressed_size) {
-      int64_t decomp_result = bshuf_decompress_lz4(data, m_data.get(), len, sizeof(int), 0);
+      int64_t decomp_result = bshuf_decompress_lz4(cbuf, m_data.get(),
+						   compressed_size, sizeof(int), 0);
       if (decomp_result < 0) {
 	std::stringstream ss;
-	ss << "bshuf_decompress_lz4() failed with status " << decomp_result << std::endl;
+	ss << "bshuf_decompress_lz4() failed with status "
+	   << decomp_result << std::endl;
+	throw std::runtime_error(ss.str());
+      } else if (static_cast<size_t>(decomp_result) != m_len) {
+	std::stringstream ss;
+	ss << "bshuf_decompress_lz4() decompressed "
+	   << decomp_result  << " bytes, expected "
+	   << m_len << " bytes." << std::endl;
 	throw std::runtime_error(ss.str());
       }
     }
-
+    
     void lz4_decode(const void* cbuf, size_t compressed_size) {
-      int64_t decomp_result = LZ4_decompress_safe(static_cast<const char*>(data),
+      int64_t decomp_result = LZ4_decompress_safe(static_cast<const char*>(cbuf),
 						  static_cast<char*>(m_data.get()),
-						  len, decompressed_size);
+						  compressed_size, m_len);
       if (decomp_result < 0) {
 	std::stringstream ss;
-	ss << "LZ4_decompress_safe() failed with status " << decomp_result << std::endl;
+	ss << "LZ4_decompress_safe() failed with status "
+	   << decomp_result << std::endl;
+	throw std::runtime_error(ss.str());
+      } else if (static_cast<size_t>(decomp_result) != m_len) {
+	std::stringstream ss;
+	ss << "LZ4_decompress_safe() decompressed "
+	   << decomp_result  << " bytes, expected "
+	   << m_len << " bytes." << std::endl;
 	throw std::runtime_error(ss.str());
       }
-      break;
     }
-    */
     
   private:
     size_t m_len;

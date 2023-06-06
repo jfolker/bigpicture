@@ -3,25 +3,34 @@
 #include <stdlib.h>
 #include <stdexcept>
 #include <string.h>
+#include <unordered_map>
 
 #include "bigpicture_utils.h"
 #include "dectris_utils.h"
 
-std::unordered_map<bigpicture::compress_t, std::string> bigpicture::compress_names {
-  { bigpicture::compress_t::unknown, "unknown"},
-  { bigpicture::compress_t::none,    "none" },
-  { bigpicture::compress_t::lz4,     "lz4" },
-  { bigpicture::compress_t::bslz4,   "bslz4" }
-};
+using namespace bigpicture;
 
-std::unordered_map<bigpicture::header_detail_t, std::string> bigpicture::header_detail_names {
-  { bigpicture::header_detail_t::unknown, "unknown"},
-  { bigpicture::header_detail_t::none,    "none" },
-  { bigpicture::header_detail_t::basic,   "basic" },
-  { bigpicture::header_detail_t::all,     "all" }
+static const std::unordered_map<header_detail_t, std::string>
+s_header_detail_names {
+  { header_detail_t::unknown, "unknown"},
+  { header_detail_t::none,    "none" },
+  { header_detail_t::basic,   "basic" },
+  { header_detail_t::all,     "all" }
 };
+/*
+  This cannot be inlined because of the following bogus compiler error:
+  
+  ld.lld: error: undefined symbol: bigpicture::compressor_name[abi:cxx11](bigpicture::header_detail_t)
+  >>> referenced by dectris_utils.cpp
+  >>>               dectris_utils.o:(bigpicture::detector_config_t::to_json[abi:cxx11]())
+  clang: error: linker command failed with exit code 1 (use -v to see invocation)  
+*/
+/*inline*/ const std::string&
+bigpicture::header_detail_name(header_detail_t x) {
+  return s_header_detail_names.at(x);
+}
 
-bool bigpicture::dectris_global_data::parse(const void* data, size_t len) {  
+bool dectris_global_data::parse(const void* data, size_t len) {  
   switch (m_parse_state) {
   case parse_state_t::part1:
     parse_part1(data, len);
@@ -108,7 +117,7 @@ bool bigpicture::dectris_global_data::parse(const void* data, size_t len) {
   return (m_parse_state == parse_state_t::done);
 }
 
-void bigpicture::dectris_global_data::parse_part1(const void* data, size_t len) {
+void dectris_global_data::parse_part1(const void* data, size_t len) {
   simdjson::error_code ec;
   std::string_view header_detail_str;
   simdjson::padded_string padded(static_cast<const char*>(data), len);
@@ -142,7 +151,7 @@ void bigpicture::dectris_global_data::parse_part1(const void* data, size_t len) 
   }
 }
 
-inline void bigpicture::dectris_global_data::parse_part2(const void* data, size_t len) {
+inline void dectris_global_data::parse_part2(const void* data, size_t len) {
   // Parse config here.
   simdjson::padded_string padded(static_cast<const char*>(data), len);
   simdjson::dom::object record = m_parser.parse(padded).get<json_obj>();
@@ -153,7 +162,7 @@ inline void bigpicture::dectris_global_data::parse_part2(const void* data, size_
 #endif
 }
 
-void bigpicture::dectris_global_data::parse_part3(const void* data, size_t len) {
+void dectris_global_data::parse_part3(const void* data, size_t len) {
   // Flatfield data header
   simdjson::error_code ec;
   simdjson::padded_string padded(static_cast<const char*>(data), len);
@@ -174,7 +183,7 @@ void bigpicture::dectris_global_data::parse_part3(const void* data, size_t len) 
   m_flatfield.reset(width, height);
 }
 
-inline void bigpicture::dectris_global_data::parse_part4(const void* data, size_t len) {
+inline void dectris_global_data::parse_part4(const void* data, size_t len) {
   // Flatfield data blob
   if (m_flatfield.n_bytes() != len) {
     std::stringstream ss;
@@ -185,7 +194,7 @@ inline void bigpicture::dectris_global_data::parse_part4(const void* data, size_
   memcpy(m_flatfield.data.get(), data, len);
 }
 
-void bigpicture::dectris_global_data::parse_part5(const void* data, size_t len) {
+void dectris_global_data::parse_part5(const void* data, size_t len) {
   // Pixelmask data header
   simdjson::error_code ec;
   simdjson::padded_string padded(static_cast<const char*>(data), len);
@@ -206,7 +215,7 @@ void bigpicture::dectris_global_data::parse_part5(const void* data, size_t len) 
   m_pixelmask.reset(width, height);
 }
 
-inline void bigpicture::dectris_global_data::parse_part6(const void* data, size_t len) {
+inline void dectris_global_data::parse_part6(const void* data, size_t len) {
   // Pixelmask data blob
   if (m_pixelmask.n_bytes() != len) {
     std::stringstream ss;
@@ -217,7 +226,7 @@ inline void bigpicture::dectris_global_data::parse_part6(const void* data, size_
   memcpy(m_pixelmask.data.get(), data, len);
 }
 
-void bigpicture::dectris_global_data::parse_part7(const void* data, size_t len) {
+void dectris_global_data::parse_part7(const void* data, size_t len) {
   // Countrate table data header
   simdjson::error_code ec;
   simdjson::padded_string padded(static_cast<const char*>(data), len);
@@ -238,7 +247,7 @@ void bigpicture::dectris_global_data::parse_part7(const void* data, size_t len) 
   m_countrate_table.reset(width, height);
 }
 
-inline void bigpicture::dectris_global_data::parse_part8(const void* data, size_t len) {
+inline void dectris_global_data::parse_part8(const void* data, size_t len) {
   // Countrate table data blob
   if (m_countrate_table.n_bytes() != len) {
     std::stringstream ss;
@@ -249,7 +258,7 @@ inline void bigpicture::dectris_global_data::parse_part8(const void* data, size_
   memcpy(m_countrate_table.data.get(), data, len);
 }
 
-inline void bigpicture::dectris_global_data::parse_appendix(const void* data, size_t len) {
+inline void dectris_global_data::parse_appendix(const void* data, size_t len) {
   /*
     We do not use the appendix for anything, but user-specific (lab-specific) 
     code may use it, e.g. for determining a directory structure for image files.
@@ -260,7 +269,7 @@ inline void bigpicture::dectris_global_data::parse_appendix(const void* data, si
 #endif
 }
 
-void bigpicture::detector_config_t::parse(const simdjson::dom::object& json) {
+void detector_config_t::parse(const simdjson::dom::object& json) {
   std::string tmp_str;
   simdjson::dom::element tmp_element;
 
@@ -306,7 +315,7 @@ void bigpicture::detector_config_t::parse(const simdjson::dom::object& json) {
   extract_simdjson_number<int64_t>(y_pixels_in_detector, json, "y_pixels_in_detector");
 }
 
-std::string bigpicture::detector_config_t::to_json() {
+std::string detector_config_t::to_json() {
   // stringstream is inefficient compared to good old-fashioned snprintf(),
   // but we don't need to keep track of format specifiers, and this method
   // is used to quickly build test cases.
@@ -317,7 +326,7 @@ std::string bigpicture::detector_config_t::to_json() {
      << "\"beam_center_x\":"        << beam_center_x        << ","
      << "\"beam_center_y\":"        << beam_center_y        << ","
      << "\"bit_depth_image\":"      << bit_depth_image      << ","
-     << "\"compression\":\""        << compress_names[compression] << "\","
+     << "\"compression\":\""        << compressor_name(compression) << "\","
      << "\"count_time\":"           << count_time           << ","
      << "\"countrate_correction_count_cutoff\":" << countrate_correction_count_cutoff << ","
      << "\"description\":\""        << description          << "\","

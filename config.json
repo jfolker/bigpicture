@@ -1,29 +1,31 @@
 {
     "archiver" : {	
 	"source" : {
-	    "interface"       : "dectris-stream",
-	    "zmq_push_socket" : "tcp://kale.ls-cat.org:9999",
-	    "poll_interval"   : 3600,
-	    "read_buffer_mb"  : 128,
+	    "interface"             : "dectris-stream",
+	    "poll_interval"         : 3600,
+	    "read_buffer_mb"        : 128,
 	    "using_header_appendix" : true,
-	    "using_image_appendix" : true
+	    "using_image_appendix"  : true,
+	    "workers"               : 12,
+	    "zmq_push_socket"       : "tcp://kale.ls-cat.org:9999"
 	},
 
 	"destination" : {
-	    "format" : "minicbf",
+	    "format"    : "minicbf",
 	    "temporary" : "/tmp/bigpicture",
 	    "permanent" : "/pf"
 	}
     },
-    
-    "indexer" : {
-	"method" : "bigpicture.index",
-	"type"   : "executable",
-	"output" : "json"
+
+    "compressor" : {
+	"format"  : "jpeg",
+	"workers" : 4
     },
     
-    "compressor" : {
-	"workers": 4,
-	"format" : "jpeg"
+    "indexer" : {
+	"method"  : "bigpicture.index",
+	"output"  : "json",
+	"type"    : "executable",
+	"workers" : 4
     }
 }

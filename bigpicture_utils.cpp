@@ -1,11 +1,35 @@
 #include <filesystem>
+#include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 
 #include <simdjson.h>
 
 #include "bigpicture_utils.h"
+
+using namespace bigpicture;
+
+static const std::unordered_map<compressor_t, std::string>
+s_compress_names {
+  { compressor_t::unknown, "unknown"},
+  { compressor_t::none,    "none" },
+  { compressor_t::lz4,     "lz4" },
+  { compressor_t::bslz4,   "bslz4" }
+};
+/*
+  This cannot be inlined because of the following bogus compiler error:
+  
+  ld.lld: error: undefined symbol: bigpicture::compressor_name[abi:cxx11](bigpicture::compressor_t)
+  >>> referenced by dectris_utils.cpp
+  >>>               dectris_utils.o:(bigpicture::detector_config_t::to_json[abi:cxx11]())
+  clang: error: linker command failed with exit code 1 (use -v to see invocation)  
+*/
+/*inline*/ const std::string&
+bigpicture::compressor_name(compressor_t x) {
+  return s_compress_names.at(x);
+}
 
 static simdjson::dom::element  s_empty_element;
 static simdjson::dom::object   s_empty_object;
@@ -15,8 +39,8 @@ static std::string             s_config_file_name;
 static simdjson::dom::parser   s_config_parser;
 static simdjson::dom::element& s_config_root = s_empty_element;
 static simdjson::dom::object&  s_config_object = s_empty_object;
-
-const simdjson::dom::object& bigpicture::load_config_file(const std::string& filename) {
+const simdjson::dom::object&
+bigpicture::load_config_file(const std::string& filename) {
   using namespace simdjson::dom;
   
   /*
@@ -45,7 +69,6 @@ const simdjson::dom::object& bigpicture::load_config_file(const std::string& fil
     This is not exciting work, but it is essential and your contribution is
     appreciated.
   */ 
-
   if (filename.compare(s_config_file_name) == 0) {
 #ifndef NDEBUG
     throw std::runtime_error("load_config_file() called twice");

@@ -1,6 +1,7 @@
 #ifndef BP_DECTRIS_STREAM_H
 #define BP_DECTRIS_STREAM_H
 
+#include <atomic>
 #include <chrono>
 #include <iostream>
 #include <sstream>
@@ -93,12 +94,13 @@ namespace bigpicture {
 
     /// @param url - The protocol and address of a ZMQ push socket, e.g. tcp://grape.ls-cat.org:9999
     constexpr dectris_streamer(stream_parser<T>& parser, const std::string& url) :
-      m_url(url),
+      m_parser(parser),
+      m_poll_interval(60*60*1000),
       m_recv_buf_size(128*1024*1024),
       m_recv_buf(new char[m_recv_buf_size]),
-      m_poll_interval(60*60*1000),
       m_shutdown_requested(false),
-      m_parser(parser) {
+      m_url(url),
+      m_zmq_ctx(1) {
     }
 
     constexpr dectris_streamer(stream_parser<T>& parser, const char* url) :
@@ -108,12 +110,13 @@ namespace bigpicture {
     /// @param config - A deserialized bigpicture config file.
     /// @todo Handle passing the config directly into the streamer
     dectris_streamer(stream_parser<T>& parser, const simdjson::dom::object& config) :
-      m_url("tcp://localhost:9999"),
+      m_parser(parser),
+      m_poll_interval(60*60*1000),
       m_recv_buf_size(128*1024*1024),
       // m_recv_buf gets set in ctor body
-      m_poll_interval(60*60*1000),
       m_shutdown_requested(false),
-      m_parser(parser) {
+      m_url("tcp://localhost:9999"),
+      m_zmq_ctx(1) {
       
       simdjson::simdjson_result<std::string_view> tmp_str;
       simdjson::simdjson_result<int64_t>          tmp_int;
@@ -144,21 +147,22 @@ namespace bigpicture {
      * @note Required for use by std::thread to avoid passing const refs around.
      */ 
     constexpr dectris_streamer(dectris_streamer&& src) :
-      m_url(std::move(src.m_url)),
+      m_parser(std::move(src.m_parser)),
+      m_poll_interval(src.m_poll_interval),
       m_recv_buf_size(src.m_recv_buf_size),
       m_recv_buf(src.m_recv_buf),
-      m_poll_interval(src.m_poll_interval),
-      m_shutdown_requested(src.m_shutdown_requested),
-      m_parser(std::move(src.m_parser)) {
+      m_shutdown_requested(src.m_shutdown_requested),      
+      m_url(std::move(src.m_url)),
+      m_zmq_ctx(std::move(src.m_zmq_ctx)) {
     }
-
+    
     /**
      * A trivial functor wrapper around run().
      * @comment This makes dectris_streamer a Callable, allowing it to be passed 
      *          into the constructor for std::thread.
      */ 
     void operator()() { run(); }
-
+		
     /**
      * Starts the server and runs until shutdown() is called.
      */
@@ -169,8 +173,7 @@ namespace bigpicture {
       // the terminal.
       std::vector<zmq::poller_event<>> in_events(1);
       zmq::poller_t<>     in_poller;
-      zmq::context_t      ctx(/*nthreads*/ 1);
-      zmq::socket_t       sock(ctx, zmq::socket_type::pull);
+      zmq::socket_t       sock(m_zmq_ctx, zmq::socket_type::pull);
       zmq::mutable_buffer buf(m_recv_buf.get(), m_recv_buf_size);      
             
       in_poller.add(sock, zmq::event_flags::pollin);
@@ -218,12 +221,13 @@ namespace bigpicture {
     dectris_streamer() = delete;
     dectris_streamer(const dectris_streamer&) = delete;
 
-    std::string               m_url;
-    size_t                    m_recv_buf_size;
-    std::unique_ptr<char[]>   m_recv_buf;
-    std::chrono::milliseconds m_poll_interval;  // ms
-    std::atomic<bool>         m_shutdown_requested;
     stream_parser<T>&         m_parser;
+    std::chrono::milliseconds m_poll_interval;  // ms
+    size_t                    m_recv_buf_size;  // bytes
+    std::unique_ptr<char[]>   m_recv_buf;
+    std::atomic<bool>         m_shutdown_requested;
+    std::string               m_url;
+    zmq::context_t            m_zmq_ctx;
   };
   
 }
