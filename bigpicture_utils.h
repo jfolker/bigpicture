@@ -23,53 +23,42 @@ namespace bigpicture {
    *         compressor_name(lz4) returns "lz4".
    */
   const std::string& compressor_name(compressor_t x);
-  
-  /**
-   * Validates the "htype" field of a global header message part or an image
-   * header message part. If the htype is incorrect, an exception is thrown.
-   *
-   * \throws std::runtime_error if htype field does not match expected value.
-   *
-   * @note Intended for use as a helper function for user-implemented stream_parser 
-   *       subclasses and used internally by dectris_global_data.
-   */
-  inline void validate_htype(const simdjson::dom::object& record,
-			     const char expected_htype[]) {
-    simdjson::error_code ec;
-    std::string_view htype_actual;
-    record["htype"].get<std::string_view>().tie(htype_actual, ec);
-    if (ec || htype_actual.compare(expected_htype) != 0) {
-      std::stringstream ss;
-      ss << "Expected htype: " << expected_htype << ", actual: " << htype_actual << std::endl;
-      throw std::runtime_error(ss.str());
-    }
-  }
 
   /**
    * Copies the value of a string/number/boolean JSON object field into dest.
    *
    * \throws std::runtime_error if the value is not in src or is not of type T.
+   * @precondition dest is a POD type, std::string_view, or std::string.
    */
   template<typename T> inline
-  void extract_simdjson_number(T& dest,
-			       const simdjson::dom::object& src,
-			       const char* name) {
+  void extract_json_value(T& dest,
+			  const simdjson::dom::object& src,
+			  const char* name) {
     simdjson::error_code ec;
     src[name].get<T>().tie(dest, ec);
     if (ec) {
       std::stringstream ss;
-      ss << "The DCU did not provide a valid config value for \"" << name << "\"" << std::endl;
+      ss << "simdjson failed with error code " << ec
+	 << "while parsing attribute: \"" << name << "\"." << std::endl;
       throw std::runtime_error(ss.str());
     }
   }
-
+  template<> inline
+  void extract_json_value<std::string>(std::string& dest,
+				       const simdjson::dom::object& src,
+				       const char* name) {
+    std::string_view sv;
+    extract_json_value(sv, src, name);
+    dest = std::string(sv);
+  }
+  
   /**
-   * @return true if a value was successfully extracted from the json to the destination
+   * @return true if a value was successfully extracted from src into dest.
    */
   template<typename T> inline
-  bool maybe_extract_simdjson_number(T& dest,
-				     const simdjson::dom::object& src,
-				     const char* name) {
+  bool maybe_extract_json_value(T& dest,
+				const simdjson::dom::object& src,
+				const char* name) noexcept {
     simdjson::error_code ec;
     src[name].get<T>().tie(dest, ec);
     if (ec) {
@@ -77,38 +66,74 @@ namespace bigpicture {
     }
     return true;
   }
-  
-  inline void extract_simdjson_string(std::string& dest,
-				      const simdjson::dom::object& src,
-				      const char* name) {
-    simdjson::error_code ec;
+  template<> inline
+  bool maybe_extract_json_value<std::string>(std::string& dest,
+					     const simdjson::dom::object& src,
+					     const char* name) noexcept {
     std::string_view sv;
-    src[name].get<std::string_view>().tie(sv, ec);
-    if (ec) {
+    if (!maybe_extract_json_value(sv, src, name)) {
+      return false;
+    }
+    dest = std::string(sv);
+    return true;
+  }
+
+  /**
+   * Copies the value of a string/number/boolean JSON object field into dest 
+   * using JSON pointer syntax.
+   *
+   * \throws std::runtime_error if the value is not in src or is not of type T.
+   * @precondition dest is a POD type, std::string_view, or std::string
+   */
+  template<typename T> inline
+  void extract_json_pointer(T& dest,
+			    const simdjson::dom::object& src,
+			    const char* jsp) {
+    simdjson::simdjson_result<T> tmp;
+    tmp = src.at_pointer(jsp).get<T>();
+    if (tmp.error()) {
       std::stringstream ss;
-      ss << "The DCU did not provide a valid config value for \"" << name << "\"" << std::endl;
+      ss << "simdjson error while retrieving JSON pointer value \""
+	 << jsp << "\":" << tmp.error() << std::endl;
       throw std::runtime_error(ss.str());
     }
+    dest = static_cast<T>(tmp.value());
+  }
+  template<> inline
+  void extract_json_pointer<std::string>(std::string& dest,
+					 const simdjson::dom::object& src,
+					 const char* jsp) {
+    std::string_view sv;
+    extract_json_pointer(sv, src, jsp);
     dest = std::string(sv);
   }
 
   /**
-   * @return true if a value was successfully extracted from the json to the destination
+   * @return true If the value was successfully extracted from src into dest.
    */
-  inline bool maybe_extract_simdjson_string(std::string& dest,
-					    const simdjson::dom::object& src,
-					    const char* name) {
-    simdjson::error_code ec;
-    std::string_view sv;
-    src[name].get<std::string_view>().tie(sv, ec);
-    if (ec) {
-      dest.clear();
+  template<typename T> inline
+  bool maybe_extract_json_pointer(T& dest,
+				  const simdjson::dom::object& src,
+				  const char* jsp) noexcept {
+    simdjson::simdjson_result<T> tmp;
+    tmp = src.at_pointer(jsp).get<T>();
+    if (tmp.error()) {
       return false;
-    } else {
-      dest = std::string(sv);
-      return true;
     }
-  }					    
+    dest = static_cast<T>(tmp.value());
+    return true;
+  }
+  template<> inline
+  bool maybe_extract_json_pointer<std::string>(std::string& dest,
+					       const simdjson::dom::object& src,
+					       const char* jsp) noexcept {
+    std::string_view sv;
+    if (!maybe_extract_json_pointer<std::string_view>(sv, src, jsp)) {
+      return false;
+    }
+    dest = std::string(sv);
+    return true;
+  }
 
   /**
    * Loads the json-based config file into memory and returns a simdjson-based 
@@ -126,28 +151,35 @@ namespace bigpicture {
   const simdjson::dom::object& load_config_file(const std::string& filename);
 
   /**
-   * A convenience utility wrapper around std::unique_ptr<char[]>
+   * A convenience utility wrapper around std::unique_ptr<char[]>.
    *
    * 1. Pointer conversion operators return the underlying raw buffer.
    * 2. Numeric conversion operators return the buffer size.
    * 3. Comparison operators compare against the buffer size.
    * 4. The boolean conversion operator returns true if the buffer is nonzero size.
+   *
+   * @note We use our own managed buffer class instead of std::vector<char> because 
+   *       std::vector incurs significant additional cost to support functionality 
+   *       beyond our scope.
+   *
+   * TODO: Add a capacity parameter and treat the reserved size and used data separately.
    */
   class unique_buffer {
   public:
     constexpr unique_buffer() noexcept : m_len(0) {}
     unique_buffer(size_t len) : m_len(len), m_data(new char[len]) {}
 
-    size_t size() const { return m_len; }
+    constexpr char*  get()  const { return m_data.get(); }
+    constexpr size_t size() const { return m_len; }
     
-    constexpr explicit operator char*()   const { return m_data.get(); }
-    constexpr explicit operator void*()   const { return m_data.get(); }
+    constexpr explicit operator char*()   const { return get(); }
+    constexpr explicit operator void*()   const { return get(); }
     
     constexpr explicit operator int64_t() const { return static_cast<int64_t>(m_len); }
     constexpr explicit operator size_t()  const { return m_len; }
     
     constexpr bool operator <(size_t rhs) const { return m_len < rhs; }
-
+    
     void resize(size_t n) {
       if (n == m_len) {
 	return;
@@ -161,7 +193,7 @@ namespace bigpicture {
 	m_data = std::unique_ptr<char[]>(new char[n]);
       }
     }
-
+    
     void reset() { resize(0); }
     
     void decode(compressor_t codec,

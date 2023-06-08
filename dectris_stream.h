@@ -50,28 +50,10 @@ namespace bigpicture {
     bool operator()(const void* data, size_t len) {
       return static_cast<Impl*>(this)->parse(data, len);
     }
-
-    /**
-     * Callable interface which uses a ZeroMQ message as its input.
-     * @param msg A ZMQ message containing a message part compliant 
-     *            with the Dectris stream interface specification.
-     */
-    bool operator()(const zmq::message_t& msg) {
-      return static_cast<Impl*>(this)->parse(msg.data(), msg.size());
+    bool operator()(const unique_buffer& msg) {
+      return static_cast<Impl*>(this)->parse(msg.get(), msg.size());
     }
-
-    /**
-     * Stream insertion operator (output), similar to std::ostream::operator<< .
-     * @param msg A ZMQ message containing a message part compliant 
-     *            with the Dectris stream interface specification.
-     * @warning No way to tell when a complete record has been processed.
-     * @warning May be removed in the future. 
-     */
-    stream_parser<Impl>& operator<<(zmq::message_t& msg) {
-      static_cast<Impl*>(this)->parse(msg.data(), msg.size());
-      return *(static_cast<Impl*>(this));
-    }
-
+    
     /**
      * Commit all received data to its output source.
      * @warning No way to tell when a complete image series has been processed.
@@ -81,6 +63,12 @@ namespace bigpicture {
       static_cast<Impl*>(this)->flush();
       return *(static_cast<Impl*>(this));
     }
+    
+  protected:
+    stream_parser() = default; // Only children can be declared.
+    
+  private:
+    stream_parser(const stream_parser&) = delete; // No copying.
   };
 
   /**
@@ -88,19 +76,14 @@ namespace bigpicture {
    */
   template<typename T> class dectris_streamer {
   public:
-    /// A function which takes as input, a buffer and its size and returns true
-    /// when an entire image series has been processed.
-    using parser_callback = std::function<bool(const void*, size_t)>;
-
     /// @param url - The protocol and address of a ZMQ push socket, e.g. tcp://grape.ls-cat.org:9999
     constexpr dectris_streamer(stream_parser<T>& parser, const std::string& url) :
       m_parser(parser),
-      m_poll_interval(60*60*1000),
-      m_recv_buf_size(128*1024*1024),
-      m_recv_buf(new char[m_recv_buf_size]),
+      m_poll_interval(poll_interval_default),
+      m_recv_buf(recv_buf_default),
       m_shutdown_requested(false),
       m_url(url),
-      m_zmq_ctx(1) {
+      m_zmq_ctx(zmq_nthread_default) {
     }
 
     constexpr dectris_streamer(stream_parser<T>& parser, const char* url) :
@@ -111,34 +94,35 @@ namespace bigpicture {
     /// @todo Handle passing the config directly into the streamer
     dectris_streamer(stream_parser<T>& parser, const simdjson::dom::object& config) :
       m_parser(parser),
-      m_poll_interval(60*60*1000),
-      m_recv_buf_size(128*1024*1024),
-      // m_recv_buf gets set in ctor body
+      m_poll_interval(poll_interval_default),
+      m_recv_buf(recv_buf_default),
       m_shutdown_requested(false),
-      m_url("tcp://localhost:9999"),
-      m_zmq_ctx(1) {
+      m_url(url_default),
+      m_zmq_ctx(zmq_nthread_default) {
       
-      simdjson::simdjson_result<std::string_view> tmp_str;
-      simdjson::simdjson_result<int64_t>          tmp_int;
+      int64_t tmp_int;
       
-      tmp_str = config.at_pointer("/archiver/source/zmq_push_socket").get_string();
-      if (!tmp_str.error()) {
-	m_url = std::string(tmp_str.value());
+      if (maybe_extract_json_pointer(tmp_int, config,
+				     "/archiver/source/poll_interval")) {
+	m_poll_interval = std::chrono::milliseconds(tmp_int * 1000);
       }
-      
-      tmp_int = config.at_pointer("/archiver/source/read_buffer_mb").get_int64();
-      if (!tmp_int.error()) {
-	m_recv_buf_size = static_cast<size_t>(tmp_int.value() * 1024 * 1024);
-      }
-      m_recv_buf = std::unique_ptr<char[]>(new char[m_recv_buf_size]);
 
-      tmp_int = config.at_pointer("/archiver/source/poll_interval").get_int64();
-      if (!tmp_int.error()) {
-	m_poll_interval = std::chrono::milliseconds(tmp_int.value()*1000);
+      if (maybe_extract_json_pointer(tmp_int, config,
+				     "/archiver/source/read_buffer_mb")) {
+	m_recv_buf.resize(static_cast<size_t>(tmp_int * 1024 * 1024));
       }
+
+      if (maybe_extract_json_pointer(tmp_int, config,
+				     "/archiver/source/workers")) {
+	m_zmq_ctx.set(zmq::ctxopt::io_threads, tmp_int);
+      }
+
+      maybe_extract_json_pointer(m_url, config,
+				 "/archiver/source/zmq_push_socket");
+      
       std::clog << "INFO: Initialized dectris_streamer with the following parameters\n"
 		<< "  url=\"" << m_url << "\""
-		<< "  rcv_buf_size=" << m_recv_buf_size
+		<< "  rcv_buf_size=" << m_recv_buf.size()
 		<< "  poll_interval=" << m_poll_interval.count() << "ms" << std::endl;
     }
     
@@ -149,9 +133,8 @@ namespace bigpicture {
     constexpr dectris_streamer(dectris_streamer&& src) :
       m_parser(std::move(src.m_parser)),
       m_poll_interval(src.m_poll_interval),
-      m_recv_buf_size(src.m_recv_buf_size),
-      m_recv_buf(src.m_recv_buf),
-      m_shutdown_requested(src.m_shutdown_requested),      
+      m_recv_buf(std::move(src.m_recv_buf)),
+      m_shutdown_requested(src.m_shutdown_requested), 
       m_url(std::move(src.m_url)),
       m_zmq_ctx(std::move(src.m_zmq_ctx)) {
     }
@@ -174,11 +157,11 @@ namespace bigpicture {
       std::vector<zmq::poller_event<>> in_events(1);
       zmq::poller_t<>     in_poller;
       zmq::socket_t       sock(m_zmq_ctx, zmq::socket_type::pull);
-      zmq::mutable_buffer buf(m_recv_buf.get(), m_recv_buf_size);      
+      zmq::mutable_buffer buf(m_recv_buf.get(), m_recv_buf.size());      
             
       in_poller.add(sock, zmq::event_flags::pollin);
       sock.connect(m_url);
-      std::cout << "INFO: connected to Dectris DCU at " << m_url << std::endl;
+      std::clog << "INFO: connected to Dectris DCU at " << m_url << std::endl;
       while (!m_shutdown_requested) {
 	// Wait for the start of a new series by polling.
 	const auto n_in = in_poller.wait_all(in_events, m_poll_interval);
@@ -194,6 +177,11 @@ namespace bigpicture {
 	  is struggling to shovel bytes into its 40-100G NIC fast enough, this will
 	  cause us (the consumer) to churn CPU waiting, but it's "less bad" than
 	  polling for each message, which adds at least 1 system call, i.e. poll().
+
+	  TODO: Detect when the parser is ready to flush data, and do so below.
+	  TODO: Multithread parsing. Receiving and parsing the 2 or 8-part global 
+	        header is a "critical section", but once we have it each thread can 
+		receive a 4-part image message.
 	*/
 	bool series_finished = false;
 	while (!series_finished) {
@@ -221,10 +209,16 @@ namespace bigpicture {
     dectris_streamer() = delete;
     dectris_streamer(const dectris_streamer&) = delete;
 
+    static constexpr int64_t poll_interval_default = 60*60*1000; // ms
+    static constexpr int64_t recv_buf_default      = 128*1024*1024; // bytes
+    static constexpr char    url_default[]         = "tcp://localhost:9999";
+    static constexpr int     zmq_nthread_default   = 1;
+
+    // TODO: Add using_header_appendix and using_image_appendix,
+    // and plumb them into the parser.
     stream_parser<T>&         m_parser;
-    std::chrono::milliseconds m_poll_interval;  // ms
-    size_t                    m_recv_buf_size;  // bytes
-    std::unique_ptr<char[]>   m_recv_buf;
+    std::chrono::milliseconds m_poll_interval;
+    unique_buffer             m_recv_buf;
     std::atomic<bool>         m_shutdown_requested;
     std::string               m_url;
     zmq::context_t            m_zmq_ctx;

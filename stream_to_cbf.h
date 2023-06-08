@@ -135,9 +135,11 @@ namespace bigpicture {
       midframe_part4,
       midframe_appendix,
     };
-    
+
+    // TODO: Separate the logic for parsing and building a CBF, but
+    // keep the parsing logic as its own subclass of stream_parser.
     std::string             m_appendix;
-    std::unique_ptr<char[]> m_buffer;
+    unique_buffer           m_buffer;
     cbf_handle              m_cbf;
     int64_t                 m_frame_id;
     dectris_global_data     m_global;

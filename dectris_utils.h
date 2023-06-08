@@ -7,6 +7,27 @@
 
 namespace bigpicture {
   /**
+   * Validates the "htype" field of a global header message part or an image
+   * header message part. If the htype is incorrect, an exception is thrown.
+   *
+   * \throws std::runtime_error if htype field does not match expected value.
+   *
+   * @note Intended for use as a helper function for user-implemented stream_parser 
+   *       subclasses and used internally by dectris_global_data.
+   */
+  inline void validate_htype(const simdjson::dom::object& record,
+			     const char expected_htype[]) {
+    simdjson::error_code ec;
+    std::string_view htype_actual;
+    record["htype"].get<std::string_view>().tie(htype_actual, ec);
+    if (ec || htype_actual.compare(expected_htype) != 0) {
+      std::stringstream ss;
+      ss << "Expected htype: " << expected_htype << ", actual: " << htype_actual << std::endl;
+      throw std::runtime_error(ss.str());
+    }
+  }
+  
+  /**
    * The header_detail field of a stream interface global header, as found in the part 1 message.
    */
   enum class header_detail_t : int {

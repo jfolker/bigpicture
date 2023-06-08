@@ -274,9 +274,9 @@ void detector_config_t::parse(const simdjson::dom::object& json) {
   simdjson::dom::element tmp_element;
 
   // Mandatory parameters
-  extract_simdjson_number<double>(beam_center_x, json, "beam_center_x");
-  extract_simdjson_number<double>(beam_center_y, json, "beam_center_y");
-  extract_simdjson_number<int64_t>(bit_depth_image, json, "bit_depth_image");
+  extract_json_value(beam_center_x, json, "beam_center_x");
+  extract_json_value(beam_center_y, json, "beam_center_y");
+  extract_json_value(bit_depth_image, json, "bit_depth_image");
   if (bit_depth_image != 32) {
     // TODO: Support bits per pixel != 32
     std::stringstream ss;
@@ -284,7 +284,7 @@ void detector_config_t::parse(const simdjson::dom::object& json) {
        << "are supported by bigpicture." << std::endl;
     throw std::runtime_error(ss.str());
   }
-  extract_simdjson_string(tmp_str, json, "compression");
+  extract_json_value(tmp_str, json, "compression");
   if (tmp_str.compare("bslz4") == 0) {
     compression = bslz4;
   } else if (tmp_str.compare("lz4") == 0) {
@@ -295,24 +295,24 @@ void detector_config_t::parse(const simdjson::dom::object& json) {
        << "\"lz4\", and \"bslz4\"." << std::endl;
     throw std::runtime_error(ss.str());
   }
-  extract_simdjson_number<double>(count_time, json, "count_time");
-  extract_simdjson_number<int64_t>(countrate_correction_count_cutoff, json,
+  extract_json_value(count_time, json, "count_time");
+  extract_json_value(countrate_correction_count_cutoff, json,
 			  "countrate_correction_count_cutoff");
-  extract_simdjson_string(description, json, "description");
-  extract_simdjson_number<double>(detector_distance, json, "detector_distance");
-  extract_simdjson_string(detector_number, json, "detector_number");
-  extract_simdjson_number<double>(frame_time, json, "frame_time");  
-  extract_simdjson_number<int64_t>(nimages, json, "nimages");
-  extract_simdjson_number<int64_t>(ntrigger, json, "ntrigger");
-  extract_simdjson_number<double>(omega_start, json, "omega_start");
-  extract_simdjson_number<double>(omega_increment, json, "omega_increment");
-  extract_simdjson_number<double>(sensor_thickness, json, "sensor_thickness");
-  extract_simdjson_string(software_version, json, "software_version");
-  extract_simdjson_number<double>(wavelength, json, "wavelength");
-  extract_simdjson_number<double>(x_pixel_size, json, "x_pixel_size");
-  extract_simdjson_number<int64_t>(x_pixels_in_detector, json, "x_pixels_in_detector");
-  extract_simdjson_number<double>(y_pixel_size, json, "y_pixel_size");
-  extract_simdjson_number<int64_t>(y_pixels_in_detector, json, "y_pixels_in_detector");
+  extract_json_value(description, json, "description");
+  extract_json_value(detector_distance, json, "detector_distance");
+  extract_json_value(detector_number, json, "detector_number");
+  extract_json_value(frame_time, json, "frame_time");  
+  extract_json_value(nimages, json, "nimages");
+  extract_json_value(ntrigger, json, "ntrigger");
+  extract_json_value(omega_start, json, "omega_start");
+  extract_json_value(omega_increment, json, "omega_increment");
+  extract_json_value(sensor_thickness, json, "sensor_thickness");
+  extract_json_value(software_version, json, "software_version");
+  extract_json_value(wavelength, json, "wavelength");
+  extract_json_value(x_pixel_size, json, "x_pixel_size");
+  extract_json_value(x_pixels_in_detector, json, "x_pixels_in_detector");
+  extract_json_value(y_pixel_size, json, "y_pixel_size");
+  extract_json_value(y_pixels_in_detector, json, "y_pixels_in_detector");
 }
 
 std::string detector_config_t::to_json() {
@@ -320,8 +320,6 @@ std::string detector_config_t::to_json() {
   // but we don't need to keep track of format specifiers, and this method
   // is used to quickly build test cases.
   std::stringstream ss;
-  ss << "{";
-  
   ss << "{"
      << "\"beam_center_x\":"        << beam_center_x        << ","
      << "\"beam_center_y\":"        << beam_center_y        << ","

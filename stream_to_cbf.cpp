@@ -27,11 +27,9 @@ bool stream_to_cbf::parse(const void* data, size_t len) {
   case parse_state_t::global_header:
     if (m_global.parse(data, len)) {
       m_parse_state = parse_state_t::new_frame;
-      // TODO: use bigpicture::unique_buffer to manage the decompression buf.
-      int decompressed_size = (sizeof(int) *
-			       m_global.config().x_pixels_in_detector *
-			       m_global.config().y_pixels_in_detector);
-      m_buffer = std::unique_ptr<char[]>(new char[decompressed_size]);
+      m_buffer.resize(sizeof(int) *
+		      m_global.config().x_pixels_in_detector *
+		      m_global.config().y_pixels_in_detector);
     }
     break;
     
@@ -63,14 +61,14 @@ bool stream_to_cbf::parse(const void* data, size_t len) {
     if (m_using_image_appendix) {
       m_parse_state = parse_state_t::midframe_appendix;
     } else {
-      flush();
+      flush(); // TODO: remove me, call flush() in dectris_streamer
       m_parse_state = parse_state_t::new_frame;
     }
     break;
     
   case parse_state_t::midframe_appendix:
     parse_appendix(data, len);
-    flush();
+    flush(); // TODO: remove me, call flush() in dectris_streamer
     m_parse_state = parse_state_t::new_frame;
     break;
     
@@ -98,9 +96,9 @@ bool stream_to_cbf::parse_part1_or_series_end(const void* data, size_t len) {
   simdjson::padded_string padded(static_cast<const char*>(data), len);
   json_obj json = m_parser.parse(padded).get<json_obj>();
   
-  extract_simdjson_string(htype, json, "htype");
+  extract_json_value(htype, json, "htype");
   if (htype.compare("dseries_end-1.0") == 0) { // series end
-    extract_simdjson_number<int64_t>(series_id, json, "series");
+    extract_json_value(series_id, json, "series");
     if (series_id != m_global.series_id()) {
       std::stringstream ss;
       ss << "Invalid series end message, expected series id: " << m_global.series_id()
@@ -118,14 +116,14 @@ bool stream_to_cbf::parse_part1_or_series_end(const void* data, size_t len) {
   }
 
   // Received a part 1 message
-  extract_simdjson_number<int64_t>(m_frame_id, json, "frame");
+  extract_json_value(m_frame_id, json, "frame");
 
   /*
     Validate that the series id matches. If the metadata is incorrect for an 
     image, we have no predictable way to find the correct metadata, the entire 
     minicbf is useless.
   */
-  extract_simdjson_number<int64_t>(series_id, json, "series");
+  extract_json_value(series_id, json, "series");
   if (series_id != m_global.series_id()) {
     std::stringstream ss;
     ss << "Invalid frame part 1 message, expected series id: " << m_global.series_id()
@@ -141,8 +139,10 @@ bool stream_to_cbf::parse_part1_or_series_end(const void* data, size_t len) {
 
 inline void stream_to_cbf::parse_part2(const void* data, size_t len) {
   /*
-    Nothing to do except maybe validate message type in debug builds.
-    We already know the dimensions of our image series from the config parameters.
+    Nothing to do except validate message type in debug builds.
+    
+    We already know the dimensions of our image series from the config 
+    parameters.
    */
 #ifndef NDEBUG
   simdjson::padded_string padded(static_cast<const char*>(data), len);
@@ -152,38 +152,7 @@ inline void stream_to_cbf::parse_part2(const void* data, size_t len) {
 }
 
 inline void stream_to_cbf::parse_part3(const void* data, size_t len) {
-  int64_t decomp_result;
-  int64_t decompressed_size = (sizeof(int) *
-			       m_global.config().x_pixels_in_detector *
-			       m_global.config().y_pixels_in_detector);
-  switch (m_global.config().compression) {
-  case bslz4:
-    decomp_result = bshuf_decompress_lz4(data, m_buffer.get(), len, sizeof(int), 0);
-    if (decomp_result < 0) {
-      std::stringstream ss;
-      ss << "bshuf_decompress_lz4() failed with status " << decomp_result << std::endl;
-      throw std::runtime_error(ss.str());
-    }
-    break;
-  case lz4:
-    decomp_result = LZ4_decompress_safe(static_cast<const char*>(data),
-					static_cast<char*>(m_buffer.get()),
-					len, decompressed_size);
-    if (decomp_result < 0) {
-      std::stringstream ss;
-      ss << "LZ4_decompress_safe() failed with status " << decomp_result << std::endl;
-	throw std::runtime_error(ss.str());
-    }
-    break;
-  case none:
-    // Compression should NEVER be set to none, but in case there's any
-    // value to disabling compression, this is an unnecessary extra copy.
-    memcpy(m_buffer.get(), data, len);
-    break;
-  default:
-    throw std::runtime_error("unknown compression parameter");
-    break;
-  }
+  m_buffer.decode(m_global.config().compression, data, len);
 }
 
 inline void stream_to_cbf::parse_part4(const void* data, size_t len) {
@@ -191,7 +160,7 @@ inline void stream_to_cbf::parse_part4(const void* data, size_t len) {
     Nothing to do except validate message type in debug builds.
 
     We don't really need the exposure time, start time, and stop time because
-    we have the configured exposure time in the global data, and the actual 
+    we have the configured exposure time in the global data, and the measured 
     exposure time per image does not vary significantly.
    */
 #ifndef NDEBUG
@@ -211,7 +180,6 @@ inline void stream_to_cbf::parse_appendix(const void* data, size_t len) {
 }
 
 void stream_to_cbf::build_cbf_header() {
-
   // FIXME: Is it really necessary to convert the pixel size to an integer number?
   // eiger2cbf does it, but surely there's some documentation that can decisively
   // say one way or another whether this is needed or unnecessary loss of precision.
