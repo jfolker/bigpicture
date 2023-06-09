@@ -46,16 +46,13 @@ namespace bigpicture {
       m_using_image_appendix(false) {
 
       cbf_make_handle(&m_cbf);
-      simdjson::simdjson_result<bool> tmp_bool =
-	config.at_pointer("/archiver/source/using_header_appendix").get_bool();
-      if (!tmp_bool.error() && tmp_bool.value()) {
+      bool tmp_bool = false;
+      if (maybe_extract_json_pointer(tmp_bool, config,
+				     "/archiver/source/using_header_appendix") && tmp_bool) {
 	m_global.enable_header_appendix();
       }
-
-      tmp_bool = config.at_pointer("/archiver/source/using_image_appendix").get_bool();
-      if (!tmp_bool.error()) {
-	m_using_image_appendix = tmp_bool.value();
-      }
+      maybe_extract_json_pointer(m_using_image_appendix, config,
+				 "/archiver/source/using_image_appendix");
     }
 
     /**
@@ -106,7 +103,7 @@ namespace bigpicture {
       m_parse_state = parse_state_t::global_header;
 
       cbf_free_handle(m_cbf);
-      m_cbf = nullptr;
+      m_cbf = nullptr; // necessary if line below fails
       cbf_make_handle(&m_cbf);
     }
 

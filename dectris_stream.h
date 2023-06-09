@@ -213,9 +213,7 @@ namespace bigpicture {
     static constexpr int64_t recv_buf_default      = 128*1024*1024; // bytes
     static constexpr char    url_default[]         = "tcp://localhost:9999";
     static constexpr int     zmq_nthread_default   = 1;
-
-    // TODO: Add using_header_appendix and using_image_appendix,
-    // and plumb them into the parser.
+    
     stream_parser<T>&         m_parser;
     std::chrono::milliseconds m_poll_interval;
     unique_buffer             m_recv_buf;
