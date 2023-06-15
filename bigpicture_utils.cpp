@@ -11,26 +11,6 @@
 
 using namespace bigpicture;
 
-static const std::unordered_map<compressor_t, std::string>
-s_compress_names {
-  { compressor_t::unknown, "unknown"},
-  { compressor_t::none,    "none" },
-  { compressor_t::lz4,     "lz4" },
-  { compressor_t::bslz4,   "bslz4" }
-};
-/*
-  This cannot be inlined because of the following bogus compiler error:
-  
-  ld.lld: error: undefined symbol: bigpicture::compressor_name[abi:cxx11](bigpicture::compressor_t)
-  >>> referenced by dectris_utils.cpp
-  >>>               dectris_utils.o:(bigpicture::detector_config_t::to_json[abi:cxx11]())
-  clang: error: linker command failed with exit code 1 (use -v to see invocation)  
-*/
-/*inline*/ const std::string&
-bigpicture::compressor_name(compressor_t x) {
-  return s_compress_names.at(x);
-}
-
 static simdjson::dom::element  s_empty_element;
 static simdjson::dom::object   s_empty_object;
 
@@ -70,27 +50,23 @@ bigpicture::load_config_file(const std::string& filename) {
     appreciated.
   */ 
   if (filename.compare(s_config_file_name) == 0) {
-#ifndef NDEBUG
-    throw std::runtime_error("load_config_file() called twice");
-#endif
     return s_config_object; // config file already loaded
-  }
-  
-  if (filename.empty() || !std::filesystem::exists(filename)) {
+  } else if (filename.empty() || !std::filesystem::exists(filename)) {
     std::stringstream ss;
     ss << "ERROR: Config file " << filename << " does not exist." << std::endl;
     throw std::runtime_error(ss.str());
   }
-
-  // Parameter validation goes here.
   
-  s_config_root = s_config_parser.load(filename);
+  s_config_file_name = filename;
+  s_config_root = s_config_parser.load(s_config_file_name);
   if (!s_config_root.is<object>()) {
     s_config_loaded = false;
     throw std::runtime_error("The root of the JSON config file hierarchy should be an object, not an array");
   }
   s_config_object = s_config_root.get_object();
   s_config_loaded = true;
+
+  // Parameter validation goes here.
   
   return s_config_object;
 }

@@ -18,11 +18,32 @@ namespace bigpicture {
     lz4=1,
     bslz4=2,
   };
-  /**
-   * @return the string representation of the enum value, e.g.
-   *         compressor_name(lz4) returns "lz4".
-   */
-  const std::string& compressor_name(compressor_t x);
+
+  const std::unordered_map<compressor_t, std::string_view>
+  compressor_names {
+    { compressor_t::unknown, "unknown"},
+    { compressor_t::none,    "none" },
+    { compressor_t::lz4,     "lz4" },
+    { compressor_t::bslz4,   "bslz4" }
+  };
+  inline std::string_view compressor_name(compressor_t value) {    
+    return compressor_names.at(value);
+  }
+
+  const std::unordered_map<std::string_view, compressor_t>
+  compressor_values {
+    { "unknown", compressor_t::unknown},
+    { "none",    compressor_t::none},
+    { "lz4",     compressor_t::lz4},
+    { "bslz4",   compressor_t::bslz4}
+  };
+  inline compressor_t compressor_value(const std::string_view& name) {    
+    return compressor_values.at(name);
+  }
+
+  inline std::ostream& operator<<(std::ostream& lhs, compressor_t value) {
+    return lhs << compressor_name(value);
+  }
 
   /**
    * Copies the value of a string/number/boolean JSON object field into dest.
@@ -167,40 +188,42 @@ namespace bigpicture {
   class unique_buffer {
   public:
     constexpr unique_buffer() noexcept : m_len(0) {}
-    unique_buffer(size_t len) : m_len(len), m_data(new char[len]) {}
+    unique_buffer(size_t uncompressed_size) :
+      m_len(uncompressed_size), m_data(new char[uncompressed_size]) {}
 
     constexpr char*  get()  const { return m_data.get(); }
     constexpr size_t size() const { return m_len; }
     
-    constexpr explicit operator char*()   const { return get(); }
-    constexpr explicit operator void*()   const { return get(); }
-    
-    constexpr explicit operator int64_t() const { return static_cast<int64_t>(m_len); }
-    constexpr explicit operator size_t()  const { return m_len; }
-    
-    constexpr bool operator <(size_t rhs) const { return m_len < rhs; }
-    
-    void resize(size_t n) {
-      if (n == m_len) {
+    void reset(size_t uncompressed_size=0) {
+#ifndef NDEBUG
+      // In debug builds, expose attempts to read old data after a reset.
+      memset(m_data.get(), 'x', m_len);
+#endif
+      if (uncompressed_size == m_len) {
 	return;
 	
-      } else if (n == 0) {
+      } else if (uncompressed_size == 0) {
 	m_len = 0;
 	m_data = nullptr;
 	
       } else {
-	m_len = n;
-	m_data = std::unique_ptr<char[]>(new char[n]);
+	m_len = uncompressed_size;
+	m_data = std::unique_ptr<char[]>(new char[m_len]);
       }
     }
-    
-    void reset() { resize(0); }
-    
-    void decode(compressor_t codec,
-		const void* src, size_t src_len) {
+
+    /**
+     * @param element_size The size of each "word" of data, e.g. the number of 
+     *                     bytes per pixel for an image.
+     * @precondition The buffer size is equal to the decoded size of the data.
+     * @warning Vulnerable to buffer overflow attacks if precondition is violated.
+     *          See bslz4_decode() below.     
+     */
+    void decode(compressor_t codec, const void* src, size_t src_len,
+		size_t element_size=4) {
       switch (codec) {
       case compressor_t::bslz4:
-	bslz4_decode(src, src_len);
+	bslz4_decode(src, src_len, element_size);
 	break;
       case compressor_t::lz4:
 	lz4_decode(src, src_len);
@@ -215,33 +238,92 @@ namespace bigpicture {
 	throw std::runtime_error(ss.str());
       }
     }
-    
-    void bslz4_decode(const void* cbuf, size_t compressed_size) {
+
+    /**
+     * @return The compressed size of the data, which is less than or equal 
+     *         to size().
+     */
+    int64_t encode(compressor_t codec, const void* src, size_t src_len,
+		   size_t element_size=4) {
+      switch (codec) {
+      case compressor_t::bslz4:
+	return bslz4_encode(src, src_len, element_size);
+      case compressor_t::lz4:
+	return lz4_encode(src, src_len);
+      case compressor_t::none:
+	memcpy(m_data.get(), src, src_len);
+	return src_len;
+      default:
+	std::stringstream ss;
+	ss << "Error in unique_buffer::encode() : codec " << codec
+	   << " unsupported" << std::endl;
+	throw std::runtime_error(ss.str());
+      }
+      return -1;
+    }
+
+    /**
+     * @param cbuf The buffer containing the compressed data to be decoded.
+     * @param compressed_size The size of cbuf in bytes.
+     * @param element_size The size of each "word" of data, e.g. the number of 
+     *                     bytes per pixel for an image.
+     * @precondition The buffer size is equal to the decoded size of the data.
+     * @warning Vulnerable to buffer overflow attacks if precondition is violated.
+     * @todo Fork bitshuffle and implement safe versions of bshuf_decompress_*.
+     */
+    void bslz4_decode(const void* cbuf, size_t compressed_size,
+		      size_t element_size=4) {
+      size_t n_elements = m_len/element_size;
       int64_t decomp_result = bshuf_decompress_lz4(cbuf, m_data.get(),
-						   compressed_size, sizeof(int), 0);
+						   n_elements, element_size, 0);
       if (decomp_result < 0) {
 	std::stringstream ss;
 	ss << "bshuf_decompress_lz4() failed with status "
 	   << decomp_result << std::endl;
 	throw std::runtime_error(ss.str());
-      } else if (static_cast<size_t>(decomp_result) != m_len) {
+      } else if (static_cast<size_t>(decomp_result) != compressed_size) {
 	std::stringstream ss;
-	ss << "bshuf_decompress_lz4() decompressed "
-	   << decomp_result  << " bytes, expected "
-	   << m_len << " bytes." << std::endl;
+	ss << "bshuf_decompress_lz4() failed to decompress all data. Processed "
+	   << decomp_result << " out of " << compressed_size << " bytes." << std::endl;
 	throw std::runtime_error(ss.str());
       }
     }
     
+    int64_t bslz4_encode(const void* src, size_t uncompressed_size,
+			 size_t element_size=4) {
+      size_t n_elements = uncompressed_size/element_size;
+      size_t upper_bound = bshuf_compress_lz4_bound(n_elements, element_size, 0);
+      if (upper_bound == 0) {
+	throw std::runtime_error("bshuf_compress_lz4_bound() detected bad data.");
+      } else if (m_len < upper_bound) {
+	reset(upper_bound);
+      }      
+      int64_t comp_result = bshuf_compress_lz4(src, m_data.get(),
+					       n_elements, element_size, 0);
+      if (comp_result < 0) {
+	std::stringstream ss;
+	ss << "bshuf_compress_lz4() failed with status "
+	   << comp_result << std::endl;
+	throw std::runtime_error(ss.str());
+      }
+      return comp_result;
+    }
+
+    /**
+     * @param cbuf The buffer containing the compressed data to be decoded.
+     * @param compressed_size The size of cbuf in bytes.
+     * @precondition The buffer size is equal to the decoded size of the data.
+     */
     void lz4_decode(const void* cbuf, size_t compressed_size) {
       int64_t decomp_result = LZ4_decompress_safe(static_cast<const char*>(cbuf),
-						  static_cast<char*>(m_data.get()),
+						  m_data.get(),
 						  compressed_size, m_len);
       if (decomp_result < 0) {
 	std::stringstream ss;
 	ss << "LZ4_decompress_safe() failed with status "
 	   << decomp_result << std::endl;
 	throw std::runtime_error(ss.str());
+	
       } else if (static_cast<size_t>(decomp_result) != m_len) {
 	std::stringstream ss;
 	ss << "LZ4_decompress_safe() decompressed "
@@ -249,6 +331,25 @@ namespace bigpicture {
 	   << m_len << " bytes." << std::endl;
 	throw std::runtime_error(ss.str());
       }
+    }
+
+    int64_t lz4_encode(const void* src, size_t uncompressed_size) {
+      size_t upper_bound = static_cast<size_t>(LZ4_compressBound(uncompressed_size));
+      if (upper_bound == 0) {
+	throw std::runtime_error("LZ4_compressBound() detected bad data.");
+      } else if (m_len < upper_bound) {
+	reset(upper_bound);
+      }
+      int64_t comp_result = LZ4_compress_default(static_cast<const char*>(src),
+						 m_data.get(),
+						 uncompressed_size, m_len);
+      if (comp_result < 0) {
+	std::stringstream ss;
+	ss << "LZ4_compress_default() failed with status "
+	   << comp_result << std::endl;
+	throw std::runtime_error(ss.str());
+      }
+      return comp_result;
     }
     
   private:

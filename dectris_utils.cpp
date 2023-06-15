@@ -10,26 +10,6 @@
 
 using namespace bigpicture;
 
-static const std::unordered_map<header_detail_t, std::string>
-s_header_detail_names {
-  { header_detail_t::unknown, "unknown"},
-  { header_detail_t::none,    "none" },
-  { header_detail_t::basic,   "basic" },
-  { header_detail_t::all,     "all" }
-};
-/*
-  This cannot be inlined because of the following bogus compiler error:
-  
-  ld.lld: error: undefined symbol: bigpicture::compressor_name[abi:cxx11](bigpicture::header_detail_t)
-  >>> referenced by dectris_utils.cpp
-  >>>               dectris_utils.o:(bigpicture::detector_config_t::to_json[abi:cxx11]())
-  clang: error: linker command failed with exit code 1 (use -v to see invocation)  
-*/
-/*inline*/ const std::string&
-bigpicture::header_detail_name(header_detail_t x) {
-  return s_header_detail_names.at(x);
-}
-
 bool dectris_global_data::parse(const void* data, size_t len) {  
   switch (m_parse_state) {
   case parse_state_t::part1:
@@ -42,7 +22,6 @@ bool dectris_global_data::parse(const void* data, size_t len) {
       throw std::runtime_error("ERROR: incompatible DCU configuration; header detail is \"none\", "
 				   "cannot obtain necessary metadata to process image frames. "
 				   "Please set \"header_detail\" to \"all\"");
-      
     } else { // Unreachable, but belt and suspenders
       assert(false && "bad bug in dectris_global_data::parse()");
       std::stringstream ss;
@@ -119,7 +98,7 @@ bool dectris_global_data::parse(const void* data, size_t len) {
 
 void dectris_global_data::parse_part1(const void* data, size_t len) {
   simdjson::error_code ec;
-  std::string_view header_detail_str;
+  std::string_view tmp_sv;
   simdjson::padded_string padded(static_cast<const char*>(data), len);
   json_obj record = m_parser.parse(padded).get<json_obj>();
 
@@ -133,22 +112,12 @@ void dectris_global_data::parse_part1(const void* data, size_t len) {
 			     "\"series\" in the global header.");
   }
 
-  record["header_detail"].get<std::string_view>().tie(header_detail_str, ec);
+  record["header_detail"].get<std::string_view>().tie(tmp_sv, ec);
   if (ec) {
     throw std::runtime_error("The DCU did not provide a valid value for "
 			     "\"header_detail\" in the global header.");
-  } else if (header_detail_str.compare("all") == 0) {
-    m_header_detail = header_detail_t::all;
-  } else if (header_detail_str.compare("basic") == 0) {
-    m_header_detail = header_detail_t::basic;
-  } else if (header_detail_str.compare("none") == 0) {
-    m_header_detail = header_detail_t::none;
-  } else {
-    std::stringstream ss;
-    ss << "The DCU provided an unrecognized value for header_detail: \""
-       << header_detail_str << "\"" << std::endl;
-    throw std::runtime_error(ss.str());
   }
+  m_header_detail = header_detail_value(tmp_sv);
 }
 
 inline void dectris_global_data::parse_part2(const void* data, size_t len) {
@@ -270,34 +239,20 @@ inline void dectris_global_data::parse_appendix(const void* data, size_t len) {
 }
 
 void detector_config_t::parse(const simdjson::dom::object& json) {
-  std::string tmp_str;
+  std::string_view tmp_sv;
   simdjson::dom::element tmp_element;
 
   // Mandatory parameters
   extract_json_value(beam_center_x, json, "beam_center_x");
   extract_json_value(beam_center_y, json, "beam_center_y");
   extract_json_value(bit_depth_image, json, "bit_depth_image");
-  if (bit_depth_image != 32) {
-    // TODO: Support bits per pixel != 32
-    std::stringstream ss;
-    ss << "bit_depth_image=" << bit_depth_image << ". Only 32-bit depth images "
-       << "are supported by bigpicture." << std::endl;
-    throw std::runtime_error(ss.str());
-  }
-  extract_json_value(tmp_str, json, "compression");
-  if (tmp_str.compare("bslz4") == 0) {
-    compression = bslz4;
-  } else if (tmp_str.compare("lz4") == 0) {
-    compression = lz4;
-  } else if (tmp_str.compare("none") == 0) {
-    std::stringstream ss;
-    ss << "compression=" << tmp_str << ". Supported values are \"none\", "
-       << "\"lz4\", and \"bslz4\"." << std::endl;
-    throw std::runtime_error(ss.str());
-  }
+
+  extract_json_value(tmp_sv, json, "compression");
+  compression = compressor_value(tmp_sv);
+  
   extract_json_value(count_time, json, "count_time");
   extract_json_value(countrate_correction_count_cutoff, json,
-			  "countrate_correction_count_cutoff");
+		     "countrate_correction_count_cutoff");
   extract_json_value(description, json, "description");
   extract_json_value(detector_distance, json, "detector_distance");
   extract_json_value(detector_number, json, "detector_number");
@@ -315,7 +270,7 @@ void detector_config_t::parse(const simdjson::dom::object& json) {
   extract_json_value(y_pixels_in_detector, json, "y_pixels_in_detector");
 }
 
-std::string detector_config_t::to_json() {
+std::string detector_config_t::to_json() const {
   // stringstream is inefficient compared to good old-fashioned snprintf(),
   // but we don't need to keep track of format specifiers, and this method
   // is used to quickly build test cases.

@@ -76,26 +76,34 @@ namespace bigpicture {
    */
   template<typename T> class dectris_streamer {
   public:
-    /// @param url - The protocol and address of a ZMQ push socket, e.g. tcp://grape.ls-cat.org:9999
-    constexpr dectris_streamer(stream_parser<T>& parser, const std::string& url) :
+    /// @param url - The protocol and address of a ZMQ push socket, e.g. "tcp://grape.ls-cat.org:9999"
+    constexpr dectris_streamer(stream_parser<T>& parser,
+			       const std::string& url) noexcept :
       m_parser(parser),
       m_poll_interval(poll_interval_default),
-      m_recv_buf(recv_buf_default),
+      m_recv_buf(new char[recv_buf_default]),
+      m_recv_buf_size(recv_buf_default),
       m_shutdown_requested(false),
       m_url(url),
       m_zmq_ctx(zmq_nthread_default) {
     }
 
-    constexpr dectris_streamer(stream_parser<T>& parser, const char* url) :
+    constexpr dectris_streamer(stream_parser<T>& parser,
+			       const char* url) noexcept :
       dectris_streamer(parser, std::string(url)) {
     }
 
-    /// @param config - A deserialized bigpicture config file.
-    /// @todo Handle passing the config directly into the streamer
+    /**
+     * Constructs a streamer using a parsed JSON config file.
+     * @param parser - A parser capable of processing data sent over the Dectris 
+     *                 "stream" interface.
+     * @param config - A deserialized bigpicture config file.
+     */
     dectris_streamer(stream_parser<T>& parser, const simdjson::dom::object& config) :
       m_parser(parser),
       m_poll_interval(poll_interval_default),
-      m_recv_buf(recv_buf_default),
+      m_recv_buf(new char[recv_buf_default]),
+      m_recv_buf_size(recv_buf_default),
       m_shutdown_requested(false),
       m_url(url_default),
       m_zmq_ctx(zmq_nthread_default) {
@@ -109,7 +117,8 @@ namespace bigpicture {
 
       if (maybe_extract_json_pointer(tmp_int, config,
 				     "/archiver/source/read_buffer_mb")) {
-	m_recv_buf.resize(static_cast<size_t>(tmp_int * 1024 * 1024));
+	m_recv_buf_size = tmp_int*1024*1024;
+	m_recv_buf.reset(new char[m_recv_buf_size]);
       }
 
       if (maybe_extract_json_pointer(tmp_int, config,
@@ -122,7 +131,7 @@ namespace bigpicture {
       
       std::clog << "INFO: Initialized dectris_streamer with the following parameters\n"
 		<< "  url=\"" << m_url << "\""
-		<< "  rcv_buf_size=" << m_recv_buf.size()
+		<< "  rcv_buf_size=" << m_recv_buf_size
 		<< "  poll_interval=" << m_poll_interval.count() << "ms" << std::endl;
     }
     
@@ -130,10 +139,11 @@ namespace bigpicture {
      * Move constructor
      * @note Required for use by std::thread to avoid passing const refs around.
      */ 
-    constexpr dectris_streamer(dectris_streamer&& src) :
+    constexpr dectris_streamer(dectris_streamer&& src) noexcept :
       m_parser(std::move(src.m_parser)),
       m_poll_interval(src.m_poll_interval),
       m_recv_buf(std::move(src.m_recv_buf)),
+      m_recv_buf_size(src.m_recv_buf_size),
       m_shutdown_requested(src.m_shutdown_requested), 
       m_url(std::move(src.m_url)),
       m_zmq_ctx(std::move(src.m_zmq_ctx)) {
@@ -157,7 +167,7 @@ namespace bigpicture {
       std::vector<zmq::poller_event<>> in_events(1);
       zmq::poller_t<>     in_poller;
       zmq::socket_t       sock(m_zmq_ctx, zmq::socket_type::pull);
-      zmq::mutable_buffer buf(m_recv_buf.get(), m_recv_buf.size());      
+      zmq::mutable_buffer buf(m_recv_buf.get(), m_recv_buf_size);      
             
       in_poller.add(sock, zmq::event_flags::pollin);
       sock.connect(m_url);
@@ -203,7 +213,7 @@ namespace bigpicture {
      *         However, it is most definitely signal-safe in terms of its consequences.
      *         Its action is atomic, it is idempotent, its effect is irreversible.
      */
-    void shutdown() { m_shutdown_requested = true; }
+    void shutdown() noexcept { m_shutdown_requested = true; }
     
   private:
     dectris_streamer() = delete;
@@ -216,7 +226,8 @@ namespace bigpicture {
     
     stream_parser<T>&         m_parser;
     std::chrono::milliseconds m_poll_interval;
-    unique_buffer             m_recv_buf;
+    std::unique_ptr<char[]>   m_recv_buf;
+    size_t                    m_recv_buf_size;
     std::atomic<bool>         m_shutdown_requested;
     std::string               m_url;
     zmq::context_t            m_zmq_ctx;

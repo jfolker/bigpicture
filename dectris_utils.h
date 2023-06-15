@@ -36,11 +36,32 @@ namespace bigpicture {
     basic=2,
     all=3,
   };
-  /**
-   * @return the string representation of the enum value, e.g.
-   *         header_detail_name(basic) returns "basic".
-   */
-  const std::string& header_detail_name(header_detail_t x);
+
+  const std::unordered_map<header_detail_t, std::string_view>
+  header_detail_names {
+    { header_detail_t::unknown, "unknown"},
+    { header_detail_t::none,    "none" },
+    { header_detail_t::basic,   "basic" },
+    { header_detail_t::all,     "all" }
+  };
+  inline std::string_view header_detail_name(header_detail_t value) {
+    return header_detail_names.at(value);
+  }
+
+  const std::unordered_map<std::string_view, header_detail_t>
+  header_detail_values {
+    { "unknown", header_detail_t::unknown },
+    { "none",    header_detail_t::none },
+    { "basic",   header_detail_t::basic },
+    { "all",     header_detail_t::all}
+  };
+  inline header_detail_t header_detail_value(const std::string_view& name) {    
+    return header_detail_values.at(name);
+  }
+
+  inline std::ostream& operator<<(std::ostream& lhs, header_detail_t value) {
+    return lhs << header_detail_name(value);
+  }
   
   /**
    * Deserialized fields from the "config" parameters of the "detector" subsystem, 
@@ -135,7 +156,7 @@ namespace bigpicture {
     /// Populates struct fields by copying values from a simdjson object.
     void parse(const simdjson::dom::object& json);
 
-    std::string to_json();
+    std::string to_json() const;
     
     /*
       TODO: beam_center_x and beam_center_y are floats according to the SIMPLON docs,
@@ -228,13 +249,23 @@ namespace bigpicture {
      * Default constructor
      * @note dectris_global_data is trivially destructible.
      * @todo constexpr-fy this when Clang libc++ makes their basic_string ctors
-     *       full-compliant with C++20.
+     *       fully-compliant with C++20.
      */
-    /*constexpr*/ dectris_global_data() :
+    /*constexpr*/ dectris_global_data(bool using_header_appendix=false) noexcept :
+      m_parse_state(parse_state_t::part1),
+      m_using_header_appendix(using_header_appendix),
+      m_series_id(-1),
+      m_header_detail(header_detail_t::unknown) {
+    }
+
+    dectris_global_data(const simdjson::dom::object& config) :
       m_parse_state(parse_state_t::part1),
       m_using_header_appendix(false),
       m_series_id(-1),
       m_header_detail(header_detail_t::unknown) {
+      
+      maybe_extract_json_pointer(m_using_header_appendix, config,
+				 "/archiver/source/using_header_appendix");
     }
 
     /**
@@ -281,12 +312,6 @@ namespace bigpicture {
       m_countrate_table.reset();
       m_header_appendix.clear();
     }
-
-    /**
-     * @todo This is a kludge. We must send a curl request to the detector to determine 
-     *       whether or not to expect an appendix for each image and frame.
-     */
-    void enable_header_appendix() { m_using_header_appendix = true; }
 
     /**
      * Each accessor method gets the value of a field defined in the global header messages.

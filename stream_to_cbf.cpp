@@ -27,9 +27,9 @@ bool stream_to_cbf::parse(const void* data, size_t len) {
   case parse_state_t::global_header:
     if (m_global.parse(data, len)) {
       m_parse_state = parse_state_t::new_frame;
-      m_buffer.resize(sizeof(int) *
-		      m_global.config().x_pixels_in_detector *
-		      m_global.config().y_pixels_in_detector);
+      m_buffer.reset((m_global.config().bit_depth_image/8) *
+		     m_global.config().x_pixels_in_detector *
+		     m_global.config().y_pixels_in_detector);
     }
     break;
     
@@ -152,7 +152,8 @@ inline void stream_to_cbf::parse_part2(const void* data, size_t len) {
 }
 
 inline void stream_to_cbf::parse_part3(const void* data, size_t len) {
-  m_buffer.decode(m_global.config().compression, data, len);
+  m_buffer.decode(m_global.config().compression, data, len,
+		  m_global.config().bit_depth_image/8);
 }
 
 inline void stream_to_cbf::parse_part4(const void* data, size_t len) {
@@ -232,7 +233,7 @@ inline void stream_to_cbf::build_cbf_data() {
 				CBF_BYTE_OFFSET,
 				1, // binary id
 				m_buffer.get(),
-				sizeof(int),
+				m_global.config().bit_depth_image/8, // bytes per pixel
 				1, // signed?
 				config.x_pixels_in_detector * config.y_pixels_in_detector,
 				"little_endian",

@@ -30,29 +30,27 @@ namespace bigpicture {
     /**
      * Default constructor
      */
-    stream_to_cbf() :            
+    stream_to_cbf(bool using_header_appendix=false,
+		  bool using_image_appendix=false) :            
       m_cbf(nullptr),
       m_frame_id(-1),
+      m_global(using_header_appendix),
       m_parse_state(parse_state_t::global_header),
-      m_using_image_appendix(false) {
-
+      m_using_image_appendix(using_image_appendix) {
+      
       cbf_make_handle(&m_cbf);
     }
     
     stream_to_cbf(const simdjson::dom::object& config) :            
       m_cbf(nullptr),
       m_frame_id(-1),
+      m_global(config),
       m_parse_state(parse_state_t::global_header),
       m_using_image_appendix(false) {
-
-      cbf_make_handle(&m_cbf);
-      bool tmp_bool = false;
-      if (maybe_extract_json_pointer(tmp_bool, config,
-				     "/archiver/source/using_header_appendix") && tmp_bool) {
-	m_global.enable_header_appendix();
-      }
+      
       maybe_extract_json_pointer(m_using_image_appendix, config,
 				 "/archiver/source/using_image_appendix");
+      cbf_make_handle(&m_cbf);
     }
 
     /**

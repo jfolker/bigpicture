@@ -22,7 +22,7 @@ EXECUTABLES := bparchived bpcompressd bpindexd
 UNIT_TESTS := test_dectris_stream
 INTEGRATION_TESTS := test_bparchived
 
-LIB_DIRS := -L ./lib -L ./deps/usr/local/lib \
+LIB_DIRS := -L ./ -L ./deps/usr/local/lib \
 	-L /usr/lib/x86_64-linux-gnu/hdf5/serial \
 	-L /usr/lib/x86_64-linux-gnu \
 	-L /usr/lib -L /usr/local/lib
@@ -77,17 +77,18 @@ default: build
 #       but it would still be nice to remove them.
 .PHONY: clean
 clean:
-	rm -f $(UNIT_TESTS) $(OBJECTS) *.log *.out *.err *.dump *.cbf *.profraw
+	rm -f $(UNIT_TESTS) $(OBJECTS) $(STATIC_LIB) $(EXECUTABLES) \
+		*.log *.out *.err *.dump *.cbf *.profraw
 
 .PHONY: install
 install: build
-	install --mode=0755 -t /usr/local/bin ./bin/*
-	install --mode=0755 -t /usr/local/lib ./lib/*
-	install --mode=0755 -t /usr/local/lib ./lib/*
-	install --mode=0755 bparchived /usr/local/bin
-	install --mode=0755 bpindexd /usr/local/bin
-	install --mode=0755 bpcompressd /usr/local/bin
-	install --mode=0644 config.json /etc/bigpicture
+	install --mode=0755 bparchived      /usr/local/bin
+	install --mode=0755 bpindexd        /usr/local/bin
+	install --mode=0755 bpcompressd     /usr/local/bin
+	install --mode=0755 bigpicture      /usr/local/bin
+	install --mode=0644 libbigpicture.a /usr/local/lib
+	install --mode=0644 *.h             /usr/local/include/bigpicture
+	install --mode=0644 config.json     /etc/bigpicture
 
 .PHONY: build
 build: Makefile deps include lib bin
@@ -110,13 +111,10 @@ include: $(HEADERS)
 #
 %.o: %.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
-.PHONY: objects
-objects: $(OBJECTS)
 
 # Link our own symbols, and leave out dependencies.
-%.a: objects $(HEADERS)
-	mkdir -p ./lib/
-	ar -crs ./lib/$@ $(OBJECTS)
+%.a: $(OBJECTS) $(HEADERS)
+	ar -crs $@ $(OBJECTS)
 .PHONY: static-lib
 static-lib: $(STATIC_LIB)
 
@@ -127,13 +125,11 @@ lib: static-lib
 #
 # Executable targets
 #
-bp%d: bp%d.cpp objects $(HEADERS)
-	mkdir -p ./bin/
-	$(CXX) $(CXXFLAGS) -fuse-ld=$(LD) -o ./bin/$@ $< $(DEPS) -l:$(STATIC_LIB)
+bp%d: bp%d.cpp $(OBJECTS) $(HEADERS)
+	$(CXX) $(CXXFLAGS) -fuse-ld=$(LD) -o $@ $< $(DEPS) -l:$(STATIC_LIB)
 
-bigpicture: bigpicture.cpp objects $(HEADERS)
-	mkdir -p ./bin/
-	$(CXX) $(CXXFLAGS) -fuse-ld=$(LD) -o ./bin/bigpicture bigpicture.cpp $(DEPS) -l:$(STATIC_LIB)
+bigpicture: bigpicture.cpp $(OBJECTS) $(HEADERS)
+	$(CXX) $(CXXFLAGS) -fuse-ld=$(LD) -o bigpicture bigpicture.cpp $(DEPS) -l:$(STATIC_LIB)
 
 bin: $(EXECUTABLES)
 
@@ -146,11 +142,11 @@ TEST_BUILD_FLAGS := -lboost_unit_test_framework -DBOOST_TEST_DYN_LINK -DBOOST_TE
 .PHONY: test
 test: unit_tests
 
-test_%: test_%.cpp
-	$(CXX) $(CXXFLAGS) -fuse-ld=$(LD) -o ./$@ $< $(OBJECTS) $(DEPS) $(TEST_BUILD_FLAGS)
+test_%: test_%.cpp $(OBJECTS) $(HEADERS)
+	$(CXX) $(CXXFLAGS) -fuse-ld=$(LD) -o ./$@ $< $(DEPS) $(TEST_BUILD_FLAGS) -l:$(STATIC_LIB)
 
 .PHONY: unit_tests
-unit_tests: $(UNIT_TESTS) objects
+unit_tests: $(UNIT_TESTS)
 	$(foreach utest,$(UNIT_TESTS),./$(utest) || echo)
 
 .PHONY: integration_tests
