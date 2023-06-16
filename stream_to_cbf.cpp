@@ -250,7 +250,7 @@ void stream_to_cbf::flush() {
   //       which is relatively neat and orderly.
   std::stringstream ss_filename;
   ss_filename << m_global.series_id() << "-" << m_frame_id << ".cbf";
-
+  
   // We open a file handle but pass ownership to libcbf.
   FILE* file_handle = fopen(ss_filename.str().c_str(), "wb");
   if (file_handle == nullptr) {
@@ -270,4 +270,7 @@ void stream_to_cbf::flush() {
        << " - " << cbf_strerror(cbf_err) << "\n";
     throw std::runtime_error(ss.str());
   }
+#ifndef NDEBUG
+  std::clog << "DEBUG: " << ss_filename.str() << " committed to storage\n";
+#endif
 }
