@@ -30,8 +30,7 @@ Instructions:
     this repository. Consequently, rebuilding without building dependencies is also done via 'make'.
     
     After building bigpicture, it is recommended to run all of the tests ('make test') to confirm all 
-    functionality works as intended before making changes or deploying into production. Doing so for the first 
-    time and all subsequent times is as simple as running 'make test'.
+    functionality works as intended before making changes or deploying into production.
     
     Obtaining dependencies (Ubuntu):
       sudo apt install pkg-config python3-pip clang llvm libgomp1 libunwind-dev libboost-all-dev \
@@ -43,14 +42,14 @@ Instructions:
       cd bigpicture
       git submodule update --init
     
-    Building for the first time and all subsequent times:
+    Building (first time and all subsequent times):
       make
       
-    Running tests:
+    Running tests (first time and all subsequent times):
       make test
       
-    Note: We do not use install submodules recursively because some extra submodules within our dependencies 
-    install headers that replace system headers, e.g. an 'errno.h' file that does not contain the necessary 
+    Note: We do not use install submodules recursively because some extra submodules within the dependencies 
+    install headers which replace system headers, e.g. an 'errno.h' file that does not contain the necessary 
     macro definitions. The submodules we use minus their submodules are sufficient to build all of the 
     functionality of bigpicture.
     
@@ -60,7 +59,7 @@ bparchived [-c config_file] :
   
   If no config file is specified, the default config file is loaded from "/etc/bigpicture/config.json".
   
-  Note that the CBF file format does not support compression, hence all images must be decompressed 
-  before committing to disk. This format is severely limited in practical use, but was chosen because 
-  utilities currently used by LS-CAT to index images, such as CCP4 and BEST require it. This may 
+  Note that the CBF file format does not support LZ4 or bitshuffle-LZ4 compression, hence all images must be 
+  decompressed before committing to disk. This format is severely limited in practical use, but was chosen 
+  because utilities currently used by LS-CAT to index images, such as CCP4 and BEST require it. This may 
   change in the future, and hopefully it will.
